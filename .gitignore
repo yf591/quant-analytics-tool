@@ -205,3 +205,41 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project specific files
+data/
+models/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# API keys and secrets
+config/secrets.yaml
+
+# Machine learning artifacts
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+
+# Streamlit
+.streamlit/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
