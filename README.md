@@ -66,6 +66,7 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
 - **Scikit-learn**: Machine learning
 - **TensorFlow/Keras**: Deep learning
 - **TA-Lib**: Technical analysis
+- **SQLite**: Local database
 
 ### Data Sources
 - **yfinance**: Yahoo Finance API
@@ -81,7 +82,7 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
 ### Prerequisites
 - **Python 3.9+** (recommended: Python 3.11)
 - **Git** for version control
-- **8GB RAM** minimum (16GB recommended)
+- **8GB RAM** minimum (16GB+ recommended)
 - **10GB free disk space** for data and models
 
 ### 1. Environment Setup
@@ -303,75 +304,52 @@ quant-analytics-tool/
 
 ## 💡 Planned Features
 
-### 📊 Data Analysis & Processing
+### 📊 Phase 1: Foundation (Weeks 1-2)
 - [x] Basic price data acquisition (Yahoo Finance)
 - [x] Data validation and cleaning
-- [ ] High-frequency tick data processing
-- [ ] Alternative data integration (news, social sentiment)
-- [ ] Multi-timeframe data synchronization
-- [ ] Real-time data streaming
-- [ ] Custom data source connectors
-- [ ] Data quality monitoring dashboard
+- [x] Project structure and configuration system
+- [ ] Local SQLite data storage
+- [ ] Comprehensive logging system
+- [ ] Unit testing framework
 
-### 🧠 Machine Learning & AI
-- [ ] Bidirectional LSTM with attention
+### 🧠 Phase 2: Feature Engineering (Weeks 3-5)
+- [ ] Core technical indicators (SMA, EMA, RSI, MACD)
+- [ ] Advanced features (Fractal dimension, Hurst exponent)
+- [ ] Information-driven bars (Volume/Dollar/Tick bars)
+- [ ] Triple barrier method labeling
+- [ ] Automated feature generation pipeline
+
+### � Phase 3: Machine Learning Models (Weeks 6-9)
+- [ ] Traditional ML (Random Forest, XGBoost, SVM)
+- [ ] Deep Learning (LSTM, Bidirectional LSTM, GRU)
 - [ ] Transformer architecture for time series
-- [ ] Reinforcement learning for trading
 - [ ] Ensemble methods and model stacking
 - [ ] AutoML pipeline with hyperparameter optimization
-- [ ] Meta-labeling and sample weights
-- [ ] Online learning for model adaptation
-- [ ] Explainable AI for model interpretability
+- [ ] Model evaluation and comparison framework
 
-### 📈 Advanced Feature Engineering
-- [ ] Information-driven bars (Volume/Dollar/Tick bars)
-- [ ] Fractal dimension and Hurst exponent
-- [ ] Microstructural features
-- [ ] Alternative technical indicators
-- [ ] Cross-asset correlation features
-- [ ] Macroeconomic indicator integration
-- [ ] Sentiment analysis features
-- [ ] Options flow and derivatives data
-
-### 🔙 Backtesting & Strategy Development
+### 📈 Phase 4: Backtesting & Risk Management (Weeks 10-12)
+- [ ] Core backtesting framework
 - [ ] Walk-forward analysis framework
 - [ ] Monte Carlo simulation engine
-- [ ] Multi-asset portfolio backtesting
-- [ ] Options strategies backtesting
-- [ ] High-frequency strategy testing
-- [ ] Regime detection and adaptation
-- [ ] Strategy optimization algorithms
-- [ ] Performance attribution analysis
-
-### ⚖️ Risk Management & Portfolio Optimization
 - [ ] Kelly criterion position sizing
-- [ ] Black-Litterman portfolio optimization
-- [ ] Risk parity and factor-based allocation
-- [ ] Dynamic hedging strategies
-- [ ] Tail risk management
-- [ ] Stress testing and scenario analysis
-- [ ] Real-time risk monitoring
-- [ ] Regulatory risk reporting
+- [ ] VaR and CVaR calculations
+- [ ] Portfolio optimization algorithms
 
-### 🔗 Integration & Deployment
-- [ ] RESTful API development
+### 🔧 Phase 5: Integration & Optimization (Weeks 13-14)
+- [ ] End-to-end workflow integration
+- [ ] Performance optimization
+- [ ] API endpoint development
+- [ ] Comprehensive testing and documentation
+- [ ] Deployment preparation
+
+### � Future Expansion (Post Phase 5)
 - [ ] Real-time trading API integration
 - [ ] Cloud deployment (AWS/GCP/Azure)
-- [ ] Containerization with Docker
-- [ ] CI/CD pipeline setup
-- [ ] Kubernetes orchestration
-- [ ] Microservices architecture
-- [ ] Message queue integration
-
-### 📱 User Experience & Interface
+- [ ] Multi-asset portfolio backtesting
+- [ ] Advanced charting and visualization
 - [ ] Mobile-responsive design
-- [ ] Progressive Web App (PWA)
-- [ ] Custom dashboard builder
-- [ ] Advanced charting library
-- [ ] Export capabilities (PDF, Excel)
-- [ ] User authentication system
 - [ ] Multi-language support
-- [ ] Accessibility compliance
+- [ ] Institutional-grade features
 
 ## 🛠 Development Guidelines
 
