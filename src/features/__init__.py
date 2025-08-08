@@ -1,18 +1,28 @@
 """
 Feature Engineering Module
 
-This module provides comprehensive feature engineering capabilities for quantitative finance,
-including technical indicators and advanced statistical measures.
+This module provides comprehensive feature engineering capabilities for financial data analysis.
+Includes technical indicators, advanced features, feature pipeline, importance analysis, and quality validation.
 """
 
 from .technical import TechnicalIndicators, TechnicalIndicatorResults
 from .advanced import AdvancedFeatures, AdvancedFeatureResults
+from .pipeline import FeaturePipeline, FeaturePipelineConfig, FeaturePipelineResults
+from .importance import FeatureImportance, FeatureImportanceResults
+from .validation import FeatureQualityValidator, FeatureQualityResults
 
 __all__ = [
     "TechnicalIndicators",
     "TechnicalIndicatorResults",
     "AdvancedFeatures",
     "AdvancedFeatureResults",
+    "FeaturePipeline",
+    "FeaturePipelineConfig",
+    "FeaturePipelineResults",
+    "FeatureImportance",
+    "FeatureImportanceResults",
+    "FeatureQualityValidator",
+    "FeatureQualityResults",
 ]
 
 from .technical import (
