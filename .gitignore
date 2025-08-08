@@ -243,3 +243,8 @@ temp/
 # Backup files
 *.bak
 *.backup
+
+# Implementation records (private documentation, not to be pushed)
+implementation_records/
+dev_notes/
+progress_logs/
