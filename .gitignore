@@ -208,7 +208,7 @@ __marimo__/
 
 # Project specific files
 data/
-models/
+/models/
 logs/
 *.db
 *.sqlite
