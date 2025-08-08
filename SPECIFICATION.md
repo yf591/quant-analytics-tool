@@ -240,12 +240,12 @@ quant-analytics-tool/
 - [x] Momentum oscillators
 - [x] Trend identification indicators
 
-#### Week 5: Advanced Features
-- [ ] Fractal dimension calculation
-- [ ] Hurst exponent implementation
-- [ ] Information-driven bars (Volume/Dollar/Tick)
-- [ ] Triple barrier labeling
-- [ ] Feature normalization and scaling
+#### Week 5: Advanced Features ✅ **COMPLETED**
+- [x] Fractal dimension calculation (Higuchi & Box-counting methods)
+- [x] Hurst exponent implementation (R/S Analysis & DFA)
+- [x] Information-driven bars (Volume/Dollar/Tick bars)
+- [x] Triple barrier labeling method (AFML-compliant meta-labeling)
+- [x] Fractional differentiation for stationarity with memory preservation
 
 #### Week 6: Feature Pipeline
 - [ ] Automated feature generation pipeline

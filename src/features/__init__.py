@@ -1,15 +1,19 @@
 """
 Feature Engineering Module
 
-This module implements feature engineering capabilities following
-"Advances in Financial Machine Learning" (AFML) methodologies.
-
-Modules:
-    - technical: Technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
-    - advanced: Advanced features (Fractal dimension, Hurst exponent, Information-driven bars)
-    - labeling: Meta-labeling methods (Triple barrier method)
-    - pipeline: Automated feature generation and selection
+This module provides comprehensive feature engineering capabilities for quantitative finance,
+including technical indicators and advanced statistical measures.
 """
+
+from .technical import TechnicalIndicators, TechnicalIndicatorResults
+from .advanced import AdvancedFeatures, AdvancedFeatureResults
+
+__all__ = [
+    "TechnicalIndicators",
+    "TechnicalIndicatorResults",
+    "AdvancedFeatures",
+    "AdvancedFeatureResults",
+]
 
 from .technical import (
     TechnicalIndicators,
