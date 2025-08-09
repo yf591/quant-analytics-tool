@@ -264,7 +264,18 @@ quant-analytics-tool/
 │   ├── 📁 test_analysis/          # Analysis module tests
 │   ├── 📁 features/               # Feature engineering tests
 │   └── 📁 models/                 # ML model tests
-│       └── test_traditional_models.py  # Traditional ML tests
+│       ├── test_traditional_models.py    # Traditional ML tests (Week 7)
+│       ├── 📁 deep_learning/             # Deep learning model tests (Week 8)
+│       │   ├── __init__.py               # Package initialization
+│       │   ├── test_lstm_gru.py          # LSTM/GRU model tests
+│       │   └── test_utils.py             # Deep learning utility tests
+│       └── 📁 advanced/                  # Advanced model tests (Week 9)
+│           ├── __init__.py               # Package initialization
+│           ├── test_transformer.py       # Transformer model tests
+│           ├── test_attention.py         # Attention mechanism tests
+│           ├── test_ensemble.py          # Ensemble method tests
+│           ├── test_meta_labeling.py     # Meta-labeling tests
+│           └── test_interpretation.py    # Model interpretation tests
 ├── 📁 scripts/                    # Utility scripts
 │   ├── init_database.py           # Database initialization
 │   ├── download_sample_data.py    # Sample data download
