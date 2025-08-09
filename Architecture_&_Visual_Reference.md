@@ -316,11 +316,15 @@ graph TB
         SCIPY[SciPy]
     end
     
-    subgraph "Machine Learning"
+    subgraph "Machine Learning (Traditional ✅)"
         SKLEARN[Scikit-learn]
-        TF[TensorFlow]
+        XGBOOST[XGBoost 2.0+]
+        JOBLIB[Joblib Persistence]
+    end
+    
+    subgraph "Deep Learning (Planned)"
+        TF[TensorFlow/Keras]
         PYTORCH[PyTorch]
-        XGBOOST[XGBoost]
     end
     
     subgraph "Financial Libraries"
@@ -331,15 +335,16 @@ graph TB
     end
     
     subgraph "Data Sources"
-        YFINANCE[yfinance]
+        YFINANCE[yfinance (Primary)]
         PANDAS_DR[pandas-datareader]
         CCXT[ccxt]
-        QUANDL[Quandl]
+        ALPHA_VANTAGE[Alpha Vantage]
     end
     
     PYTHON --> PANDAS
     PYTHON --> NUMPY
     PANDAS --> SKLEARN
+    SKLEARN --> XGBOOST
     NUMPY --> TF
     PANDAS --> TALIB
     TALIB --> BACKTRADER
@@ -836,30 +841,44 @@ graph TB
     subgraph "Data Preparation"
         FEATURES[Feature Set] --> SPLIT[Train/Val/Test Split]
         SPLIT --> SCALE[Feature Scaling]
-        SCALE --> ENGINEER[Feature Engineering]
+        SCALE --> VALIDATION[Data Validation]
     end
     
-    subgraph "Model Development"
-        ENGINEER --> SELECT[Model Selection]
-        SELECT --> TRAIN[Model Training]
-        TRAIN --> TUNE[Hyperparameter Tuning]
-        TUNE --> VALIDATE[Model Validation]
+    subgraph "Traditional ML Models (✅ Implemented)"
+        VALIDATION --> RF[Random Forest]
+        VALIDATION --> XGB[XGBoost]
+        VALIDATION --> SVM[Support Vector Machine]
+    end
+    
+    subgraph "Deep Learning Models (Planned)"
+        VALIDATION --> LSTM[LSTM]
+        VALIDATION --> GRU[GRU]
+        VALIDATION --> TRANSFORMER[Transformer]
     end
     
     subgraph "Model Evaluation"
-        VALIDATE --> METRICS[Performance Metrics]
-        METRICS --> COMPARE[Model Comparison]
-        COMPARE --> BEST[Best Model Selection]
+        RF --> EVAL[Model Evaluator]
+        XGB --> EVAL
+        SVM --> EVAL
+        LSTM --> EVAL
+        GRU --> EVAL
+        TRANSFORMER --> EVAL
+        
+        EVAL --> FINANCIAL_METRICS[Financial Metrics]
+        FINANCIAL_METRICS --> CROSS_VAL[Cross Validation]
     end
     
-    subgraph "Deployment"
+    subgraph "Model Selection & Deployment"
+        CROSS_VAL --> COMPARE[Model Comparison]
+        COMPARE --> BEST[Best Model Selection]
         BEST --> SERIALIZE[Model Serialization]
         SERIALIZE --> DEPLOY[Model Deployment]
         DEPLOY --> MONITOR[Performance Monitoring]
     end
     
     MONITOR --> RETRAIN{Retrain Needed?}
-    RETRAIN -->|Yes| TRAIN
+    RETRAIN -->|Yes| RF
+    RETRAIN -->|No| MONITOR
     RETRAIN -->|No| MONITOR
 ```
 
@@ -905,12 +924,68 @@ classDiagram
         +bollinger_bands(data, window, std)
     }
     
-    class MLModelBase {
+    class BaseModel {
         +train(features, targets)
         +predict(features)
         +evaluate(test_data)
         +save_model(path)
         +load_model(path)
+        +get_feature_importance()
+    }
+    
+    class BaseClassifier {
+        +predict_proba(features)
+        +classification_report()
+    }
+    
+    class BaseRegressor {
+        +predict_intervals(features)
+        +regression_metrics()
+    }
+    
+    class QuantRandomForestClassifier {
+        +n_estimators: int
+        +class_weight: str
+        +get_feature_importance()
+        +plot_feature_importance()
+    }
+    
+    class QuantRandomForestRegressor {
+        +predict_quantiles(features)
+        +estimate_uncertainty()
+    }
+    
+    class QuantXGBoostClassifier {
+        +learning_rate: float
+        +early_stopping: bool
+        +gpu_acceleration: bool
+    }
+    
+    class QuantXGBoostRegressor {
+        +objective: str
+        +regularization: dict
+    }
+    
+    class QuantSVMClassifier {
+        +kernel: str
+        +probability: bool
+        +plot_decision_boundary()
+    }
+    
+    class QuantSVMRegressor {
+        +epsilon: float
+        +kernel_params: dict
+    }
+    
+    class ModelEvaluator {
+        +evaluate_model(model, data)
+        +compare_models(models)
+        +financial_metrics()
+    }
+    
+    class CrossValidator {
+        +time_series_split()
+        +purged_cv()
     }
     
     class LSTMModel {
@@ -930,8 +1005,23 @@ classDiagram
     
     BaseDataCollector <|-- YFinanceCollector
     BaseDataCollector <|-- AlphaVantageCollector
-    MLModelBase <|-- LSTMModel
+    
+    BaseModel <|-- BaseClassifier
+    BaseModel <|-- BaseRegressor
+    
+    BaseClassifier <|-- QuantRandomForestClassifier
+    BaseClassifier <|-- QuantXGBoostClassifier
+    BaseClassifier <|-- QuantSVMClassifier
+    
+    BaseRegressor <|-- QuantRandomForestRegressor
+    BaseRegressor <|-- QuantXGBoostRegressor
+    BaseRegressor <|-- QuantSVMRegressor
+    
+    BaseModel <|-- LSTMModel
+    
     FeatureEngineering --> TechnicalIndicators
+    BaseModel --> ModelEvaluator
+    ModelEvaluator --> CrossValidator
 ```
 
 ### Database Schema Design
