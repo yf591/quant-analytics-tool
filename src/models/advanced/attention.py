@@ -14,6 +14,9 @@ Based on:
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import List, Tuple, Optional
 from tensorflow import keras
 from tensorflow.keras import layers
 import matplotlib.pyplot as plt
@@ -254,88 +257,165 @@ class AttentionVisualizer:
         self.feature_names = feature_names
 
     def plot_attention_heatmap(
-        self, sample_idx: int = 0, figsize: Tuple[int, int] = (12, 8)
+        self,
+        attention_weights: np.ndarray,
+        timestamps: pd.DatetimeIndex = None,
+        figsize: Tuple[int, int] = (12, 8),
     ):
         """
-        Plot attention heatmap for a specific sample.
+        Plot attention heatmap for attention weights.
 
         Args:
-            sample_idx: Index of the sample to visualize
+            attention_weights: Attention weights array (seq_len, seq_len)
+            timestamps: Optional timestamps for axis labels
             figsize: Figure size tuple
         """
-        if self.attention_weights is None:
-            raise ValueError(
-                "No attention weights stored. Call store_attention_weights first."
-            )
+        import matplotlib.pyplot as plt
+        import seaborn as sns
 
-        # Extract attention weights for the specified sample
-        if len(self.attention_weights.shape) == 3:  # Multi-head attention
-            weights = np.mean(self.attention_weights[sample_idx], axis=0)
-        else:
-            weights = self.attention_weights[sample_idx]
-
-        # Create the heatmap
         plt.figure(figsize=figsize)
 
-        if (
-            self.feature_names is not None
-            and len(self.feature_names) == weights.shape[1]
-        ):
-            # If we have feature names, use them as labels
+        # Create labels from timestamps if provided
+        if timestamps is not None:
+            time_labels = [ts.strftime("%H:%M") for ts in timestamps]
             sns.heatmap(
-                weights,
-                xticklabels=self.feature_names,
-                yticklabels=[f"Time_{i}" for i in range(weights.shape[0])],
+                attention_weights,
+                xticklabels=time_labels[
+                    :: max(1, len(time_labels) // 10)
+                ],  # Sample labels to avoid crowding
+                yticklabels=time_labels[:: max(1, len(time_labels) // 10)],
                 cmap="Blues",
                 annot=False,
                 cbar_kws={"label": "Attention Weight"},
             )
         else:
-            # Otherwise, use numeric labels
             sns.heatmap(
-                weights,
+                attention_weights,
                 cmap="Blues",
                 annot=False,
                 cbar_kws={"label": "Attention Weight"},
             )
 
-        plt.title(f"Attention Weights Heatmap (Sample {sample_idx})")
-        plt.xlabel("Features")
-        plt.ylabel("Time Steps")
+        plt.title("Attention Weights Heatmap")
+        plt.xlabel("Key Position")
+        plt.ylabel("Query Position")
         plt.tight_layout()
         plt.show()
 
     def plot_temporal_attention(
-        self, sample_idx: int = 0, figsize: Tuple[int, int] = (10, 6)
+        self,
+        data: np.ndarray,
+        attention_weights: np.ndarray,
+        timestamps: pd.DatetimeIndex,
+        feature_names: List[str] = None,
+        figsize: Tuple[int, int] = (15, 10),
     ):
         """
-        Plot temporal attention weights over time.
+        Plot temporal attention weights with data.
 
         Args:
-            sample_idx: Index of the sample to visualize
+            data: Input data array (seq_len, n_features)
+            attention_weights: Multi-head attention weights (num_heads, seq_len, seq_len)
+            timestamps: Timestamps for x-axis
+            feature_names: Names of features
             figsize: Figure size tuple
         """
-        if self.attention_weights is None:
-            raise ValueError(
-                "No attention weights stored. Call store_attention_weights first."
-            )
+        import matplotlib.pyplot as plt
 
-        # Extract temporal attention (average across features)
-        if len(self.attention_weights.shape) == 3:
-            temporal_weights = np.mean(self.attention_weights[sample_idx], axis=-1)
-        else:
-            temporal_weights = np.mean(self.attention_weights[sample_idx], axis=-1)
+        fig, axes = plt.subplots(2, 1, figsize=figsize)
 
-        plt.figure(figsize=figsize)
-        plt.plot(range(len(temporal_weights)), temporal_weights, "b-", linewidth=2)
-        plt.fill_between(range(len(temporal_weights)), temporal_weights, alpha=0.3)
+        # Plot 1: Average attention weights across heads and queries
+        avg_attention = np.mean(
+            attention_weights, axis=(0, 1)
+        )  # Average across heads and queries
 
-        plt.title(f"Temporal Attention Weights (Sample {sample_idx})")
-        plt.xlabel("Time Steps")
-        plt.ylabel("Attention Weight")
-        plt.grid(True, alpha=0.3)
+        axes[0].plot(
+            timestamps, avg_attention, "b-", linewidth=2, label="Attention Weight"
+        )
+        axes[0].fill_between(timestamps, avg_attention, alpha=0.3)
+        axes[0].set_title("Temporal Attention Weights")
+        axes[0].set_ylabel("Average Attention")
+        axes[0].grid(True, alpha=0.3)
+        axes[0].legend()
+
+        # Plot 2: Feature data with attention overlay
+        if feature_names is None:
+            feature_names = [f"Feature_{i}" for i in range(data.shape[1])]
+
+        # Show first few features
+        n_features_to_show = min(3, data.shape[1])
+        for i in range(n_features_to_show):
+            axes[1].plot(timestamps, data[:, i], label=feature_names[i], alpha=0.7)
+
+        # Overlay attention as background color intensity
+        axes[1].fill_between(
+            timestamps,
+            axes[1].get_ylim()[0],
+            axes[1].get_ylim()[1],
+            alpha=avg_attention / np.max(avg_attention) * 0.3,
+            color="red",
+        )
+
+        axes[1].set_title("Financial Data with Attention Overlay")
+        axes[1].set_xlabel("Time")
+        axes[1].set_ylabel("Value")
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+
         plt.tight_layout()
         plt.show()
+
+    def calculate_attention_statistics(self, attention_weights: np.ndarray) -> dict:
+        """
+        Calculate statistics from attention weights.
+
+        Args:
+            attention_weights: Attention weights array (num_heads, batch_size, seq_len, seq_len)
+
+        Returns:
+            Dictionary containing attention statistics
+        """
+        stats = {}
+
+        # Basic statistics
+        stats["mean_attention"] = float(np.mean(attention_weights))
+        stats["std"] = float(np.std(attention_weights))
+        stats["min"] = float(np.min(attention_weights))
+        stats["max"] = float(np.max(attention_weights))
+
+        # Attention distribution statistics
+        stats["attention_entropy"] = float(
+            -np.sum(attention_weights * np.log(attention_weights + 1e-8))
+            / attention_weights.size
+        )
+
+        # Maximum attention position
+        max_idx = np.unravel_index(
+            np.argmax(attention_weights), attention_weights.shape
+        )
+        stats["max_attention_position"] = max_idx
+
+        # Head-specific statistics
+        if len(attention_weights.shape) >= 3:
+            head_means = (
+                np.mean(attention_weights, axis=(1, 2, 3))
+                if len(attention_weights.shape) == 4
+                else np.mean(attention_weights, axis=(1, 2))
+            )
+            stats["head_means"] = head_means.tolist()
+            stats["head_std"] = np.std(head_means).item()
+
+        # Temporal statistics
+        if len(attention_weights.shape) >= 3:
+            # Average attention across time steps
+            temporal_attention = np.mean(
+                attention_weights, axis=tuple(range(len(attention_weights.shape) - 2))
+            )
+            stats["temporal_mean"] = float(np.mean(temporal_attention))
+            stats["temporal_std"] = float(np.std(temporal_attention))
+            stats["temporal_max_idx"] = int(np.argmax(temporal_attention))
+
+        return stats
 
     def plot_feature_attention(
         self, time_step: int = -1, figsize: Tuple[int, int] = (10, 6)

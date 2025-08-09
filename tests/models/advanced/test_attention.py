@@ -48,10 +48,12 @@ class TestAttentionLayer:
 
         # Create dummy input
         inputs = tf.random.normal((batch_size, seq_len, input_dim))
-        output = attention_layer(inputs)
+        attended_output, attention_weights = attention_layer(inputs)
 
-        # Output should maintain sequence dimension
-        assert len(output.shape) >= 2
+        # Output should be (batch_size, input_dim) after attention pooling
+        assert attended_output.shape == (batch_size, input_dim)
+        # Attention weights should be (batch_size, seq_len)
+        assert attention_weights.shape == (batch_size, seq_len)
 
 
 @pytest.mark.skipif(not ATTENTION_AVAILABLE, reason="Attention module not available")
@@ -77,9 +79,10 @@ class TestMultiHeadAttention:
 
         # Create dummy input
         inputs = tf.random.normal((batch_size, seq_len, d_model))
-        output = mha(inputs, inputs, inputs)  # self-attention
+        output, attention_weights = mha(inputs, inputs, inputs)  # self-attention
 
         assert output.shape == (batch_size, seq_len, d_model)
+        assert attention_weights.shape == (batch_size, num_heads, seq_len, seq_len)
 
     def test_multihead_attention_with_mask(self):
         """Test MultiHeadAttention with attention mask."""
@@ -92,11 +95,15 @@ class TestMultiHeadAttention:
 
         # Create dummy input and mask
         inputs = tf.random.normal((batch_size, seq_len, d_model))
-        mask = tf.random.uniform((batch_size, seq_len)) > 0.5  # Random mask
+        # Create attention mask with proper shape for multi-head attention
+        # Shape should be [batch_size, 1, 1, seq_len] for broadcasting
+        base_mask = tf.cast(tf.random.uniform((batch_size, seq_len)) > 0.5, tf.float32)
+        mask = tf.expand_dims(tf.expand_dims(base_mask, 1), 1) * -1e9
 
-        output = mha(inputs, inputs, inputs, mask=mask)
+        output, attention_weights = mha(inputs, inputs, inputs, mask=mask)
 
         assert output.shape == (batch_size, seq_len, d_model)
+        assert attention_weights.shape == (batch_size, num_heads, seq_len, seq_len)
 
 
 @pytest.mark.skipif(not ATTENTION_AVAILABLE, reason="Attention module not available")
@@ -106,8 +113,9 @@ class TestTemporalAttention:
     def test_temporal_attention_creation(self):
         """Test TemporalAttention creation."""
         units = 64
+        time_steps = 60
 
-        temporal_attention = TemporalAttention(units)
+        temporal_attention = TemporalAttention(units, time_steps)
         assert temporal_attention is not None
 
     def test_temporal_attention_output_shape(self):
@@ -117,7 +125,7 @@ class TestTemporalAttention:
         batch_size = 32
         n_features = 8
 
-        temporal_attention = TemporalAttention(units)
+        temporal_attention = TemporalAttention(units, seq_len)
 
         # Create financial-like sequential data
         inputs = tf.random.normal((batch_size, seq_len, n_features))
@@ -133,7 +141,7 @@ class TestTemporalAttention:
         batch_size = 32
         n_features = 8
 
-        temporal_attention = TemporalAttention(units, use_temporal_encoding=True)
+        temporal_attention = TemporalAttention(units, seq_len)
 
         # Create inputs with temporal information
         inputs = tf.random.normal((batch_size, seq_len, n_features))
@@ -163,12 +171,14 @@ class TestAttentionVisualizer:
         data = np.random.randn(batch_size, seq_len, n_features)
 
         # Sample attention weights (head, batch, seq_len, seq_len)
-        attention_weights = np.random.softmax(
-            np.random.randn(num_heads, batch_size, seq_len, seq_len), axis=-1
+        raw_weights = np.random.randn(num_heads, batch_size, seq_len, seq_len)
+        # Apply softmax manually since np.random.softmax doesn't exist
+        attention_weights = np.exp(raw_weights) / np.sum(
+            np.exp(raw_weights), axis=-1, keepdims=True
         )
 
         # Sample timestamps
-        timestamps = pd.date_range("2023-01-01", periods=seq_len, freq="1H")
+        timestamps = pd.date_range("2023-01-01", periods=seq_len, freq="1h")
 
         return data, attention_weights, timestamps
 
@@ -185,15 +195,11 @@ class TestAttentionVisualizer:
         visualizer = AttentionVisualizer()
 
         # Should generate heatmap without errors
-        try:
-            visualizer.plot_attention_heatmap(
-                attention_weights[0, 0], timestamps  # Single head, single sample
-            )
-            success = True
-        except Exception as e:
-            success = False
-
-        assert success
+        visualizer.plot_attention_heatmap(
+            attention_weights[0, 0], timestamps  # Single head, single sample
+        )
+        # If we get here without exception, the test passes
+        assert True
 
     @patch("matplotlib.pyplot.show")
     def test_temporal_attention_plot(self, mock_show, sample_attention_data):
@@ -203,27 +209,23 @@ class TestAttentionVisualizer:
         visualizer = AttentionVisualizer()
 
         # Test temporal attention visualization
-        try:
-            visualizer.plot_temporal_attention(
-                data[0],  # Single sample
-                attention_weights[:, 0],  # All heads, single sample
-                timestamps,
-                feature_names=[
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "volume",
-                    "sma",
-                    "rsi",
-                    "macd",
-                ],
-            )
-            success = True
-        except Exception as e:
-            success = False
-
-        assert success
+        visualizer.plot_temporal_attention(
+            data[0],  # Single sample
+            attention_weights[:, 0],  # All heads, single sample
+            timestamps,
+            feature_names=[
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "sma",
+                "rsi",
+                "macd",
+            ],
+        )
+        # If we get here without exception, the test passes
+        assert True
 
     def test_attention_statistics(self, sample_attention_data):
         """Test attention statistics calculation."""
@@ -249,9 +251,8 @@ class TestAttentionModelCreation:
 
         model = create_attention_model(
             input_shape=input_shape,
-            model_type="lstm",
             attention_type="temporal",
-            num_classes=3,
+            output_dim=3,
         )
 
         assert model is not None
@@ -263,9 +264,8 @@ class TestAttentionModelCreation:
 
         model = create_attention_model(
             input_shape=input_shape,
-            model_type="gru",
-            attention_type="multihead",
-            num_classes=2,
+            attention_type="multi_head",
+            output_dim=2,
         )
 
         assert model is not None
@@ -279,9 +279,8 @@ class TestAttentionModelCreation:
         # Create model
         model = create_attention_model(
             input_shape=input_shape,
-            model_type="lstm",
             attention_type="temporal",
-            num_classes=2,
+            output_dim=2,
         )
 
         # Compile model
@@ -389,9 +388,8 @@ class TestAttentionIntegration:
         # Create attention model
         model = create_attention_model(
             input_shape=X.shape[1:],
-            model_type="lstm",
             attention_type="temporal",
-            num_classes=2,
+            output_dim=2,
         )
 
         model.compile(
@@ -413,10 +411,8 @@ class TestAttentionIntegration:
         # Create model with attention
         model = create_attention_model(
             input_shape=X.shape[1:],
-            model_type="lstm",
-            attention_type="multihead",
-            num_classes=2,
-            return_attention=True,
+            attention_type="multi_head",
+            output_dim=2,
         )
 
         model.compile(optimizer="adam", loss="sparse_categorical_crossentropy")
@@ -431,11 +427,12 @@ class TestAttentionIntegration:
 
         # Create sample attention weights
         seq_len = X.shape[1]
-        attention_weights = np.random.softmax(
-            np.random.randn(4, 1, seq_len, seq_len), axis=-1  # 4 heads
+        raw_weights = np.random.randn(4, 1, seq_len, seq_len)  # 4 heads
+        attention_weights = np.exp(raw_weights) / np.sum(
+            np.exp(raw_weights), axis=-1, keepdims=True
         )
 
-        timestamps = pd.date_range("2023-01-01", periods=seq_len, freq="1H")
+        timestamps = pd.date_range("2023-01-01", periods=seq_len, freq="1h")
 
         # Test statistics calculation
         stats = visualizer.calculate_attention_statistics(attention_weights)
@@ -456,9 +453,8 @@ class TestAttentionIntegration:
         # Create attention model
         model = create_attention_model(
             input_shape=(seq_len, n_features),
-            model_type="gru",
             attention_type="temporal",
-            num_classes=2,
+            output_dim=2,
         )
 
         model.compile(
