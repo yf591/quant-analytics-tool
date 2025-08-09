@@ -2,7 +2,23 @@
 """
 Week 9 Advanced Models Integration Demo
 
-Quick demonstration of all implemented Advanced Models components
+Quick demonstration of all implemented Advanced     # Test 5: Model Interpretation
+    print("🔍 Testing Model Interpretation...")
+    try:
+        from src.models.advanced.interpretation import FeatureImportanceAnalyzer, InterpretationConfig
+        from sklearn.ensemble import RandomForestClassifier
+
+        # Train a simple model for interpretation
+        model = RandomForestClassifier(n_estimators=20, random_state=42)
+        model.fit(X_train, y_train)
+
+        config = InterpretationConfig()
+        analyzer = FeatureImportanceAnalyzer(config=config)
+        importance = analyzer.analyze_tree_importance(model, feature_names=features.columns.tolist())
+
+        print(f"  ✅ FeatureImportanceAnalyzer: Analyzed {len(importance)} features")
+    except Exception as e:
+        print(f"  ❌ Interpretation test failed: {e}")s
 to verify successful integration and functionality.
 """
 
@@ -47,9 +63,9 @@ def main():
     # Test 1: Transformer Models
     print("🔄 Testing Transformer Models...")
     try:
-        from src.models.advanced.transformer import TransformerConfig
+        from src.models.advanced.transformer import create_transformer_config
 
-        config = TransformerConfig(
+        config = create_transformer_config(
             d_model=32, num_heads=4, num_layers=2, sequence_length=30
         )
 
@@ -73,7 +89,7 @@ def main():
     # Test 3: Ensemble Methods
     print("🌟 Testing Ensemble Methods...")
     try:
-        from src.models.advanced.ensemble import FinancialRandomForest
+        from src.models.advanced.ensemble import FinancialRandomForest, EnsembleConfig
         from sklearn.model_selection import train_test_split
 
         # Simple ensemble test
@@ -81,7 +97,8 @@ def main():
             features.values, target.values, test_size=0.3, random_state=42
         )
 
-        ensemble = FinancialRandomForest(n_estimators=10, random_state=42)
+        config = EnsembleConfig(n_estimators=10, random_state=42)
+        ensemble = FinancialRandomForest(config=config)
         ensemble.fit(X_train, y_train)
         predictions = ensemble.predict(X_test)
 
@@ -93,17 +110,24 @@ def main():
     # Test 4: Meta-labeling
     print("🏷️  Testing Meta-labeling...")
     try:
-        from src.models.advanced.meta_labeling import TripleBarrierLabeling
-
-        labeler = TripleBarrierLabeling(
-            pt_sl=[0.02, 0.02],  # 2% profit taking and stop loss
-            min_ret=0.005,  # 0.5% minimum return
-            num_days=5,  # 5-day horizon
+        from src.models.advanced.meta_labeling import (
+            TripleBarrierLabeling,
+            MetaLabelingConfig,
         )
 
-        # Generate labels for subset
+        config = MetaLabelingConfig(
+            profit_target=0.02,  # 2% profit taking
+            stop_loss=0.02,  # 2% stop loss
+            max_holding_period=5,  # 5-day horizon
+        )
+        labeler = TripleBarrierLabeling(config=config)
+
+        # Generate labels for subset using price and events
         subset_features = features.head(100)
-        labels = labeler.apply_triple_barrier_labeling(subset_features)
+        prices = subset_features["price"]
+        events = prices.index  # Use all timestamps as events
+
+        labels = labeler.apply_triple_barrier(prices, pd.Series(index=events, data=1))
 
         print(f"  ✅ TripleBarrierLabeling: Generated {len(labels)} labels")
     except Exception as e:
@@ -112,17 +136,23 @@ def main():
     # Test 5: Model Interpretation
     print("🔍 Testing Model Interpretation...")
     try:
-        from src.models.advanced.interpretation import FeatureImportanceAnalyzer
+        from src.models.advanced.interpretation import (
+            FeatureImportanceAnalyzer,
+            InterpretationConfig,
+        )
         from sklearn.ensemble import RandomForestClassifier
 
         # Train a simple model for interpretation
         model = RandomForestClassifier(n_estimators=20, random_state=42)
         model.fit(X_train, y_train)
 
-        analyzer = FeatureImportanceAnalyzer(model=model)
-        importance = analyzer.get_importance(feature_names=features.columns.tolist())
+        config = InterpretationConfig()
+        analyzer = FeatureImportanceAnalyzer(config=config)
+        importance = analyzer.analyze_tree_importance(
+            model, feature_names=features.columns.tolist()
+        )
 
-        print(f"  ✅ FeatureImportanceAnalyzer: Top feature = {importance.idxmax()}")
+        print(f"  ✅ FeatureImportanceAnalyzer: Analyzed {len(importance)} features")
     except Exception as e:
         print(f"  ❌ Interpretation test failed: {e}")
 

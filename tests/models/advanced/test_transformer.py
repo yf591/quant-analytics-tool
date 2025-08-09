@@ -295,25 +295,26 @@ class TestTransformerConfig:
     def test_create_transformer_config(self):
         """Test transformer configuration creation."""
         config = create_transformer_config(
-            input_dim=10, sequence_length=60, num_classes=3
+            d_model=10, num_heads=2, num_layers=2, sequence_length=60
         )
 
         assert config is not None
-        assert "input_dim" in config
-        assert "sequence_length" in config
-        assert "num_classes" in config
-        assert config["input_dim"] == 10
-        assert config["sequence_length"] == 60
-        assert config["num_classes"] == 3
+        assert hasattr(config, "d_model")
+        assert hasattr(config, "num_heads")
+        assert hasattr(config, "num_layers")
+        assert config.d_model == 10
+        assert config.num_heads == 2
+        assert config.num_layers == 2
 
     def test_create_transformer_config_defaults(self):
         """Test transformer configuration with defaults."""
-        config = create_transformer_config(input_dim=5, sequence_length=30)
+        config = create_transformer_config(d_model=5, sequence_length=30)
 
         assert config is not None
-        assert "d_model" in config
-        assert "num_heads" in config
-        assert "num_layers" in config
+        assert hasattr(config, "d_model")
+        assert hasattr(config, "num_heads")
+        assert hasattr(config, "num_layers")
+        assert config.d_model == 5
 
 
 # Integration tests

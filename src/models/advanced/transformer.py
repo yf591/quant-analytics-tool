@@ -228,6 +228,14 @@ class TransformerClassifier(BaseFinancialModel):
         self.scaler = None
         self.is_fitted = False
 
+    def _build_model(self) -> Any:
+        """Build the model architecture."""
+        if hasattr(self.config, "d_model"):
+            return FinancialTransformer(config=self.config, output_dim=2)
+        else:
+            # Fallback for old-style configs
+            return None
+
     def fit(
         self, X: pd.DataFrame, y: pd.Series, validation_data: Optional[Tuple] = None
     ) -> ModelResults:
@@ -365,6 +373,14 @@ class TransformerRegressor(BaseFinancialModel):
         self.scaler = None
         self.is_fitted = False
 
+    def _build_model(self) -> Any:
+        """Build the model architecture."""
+        if hasattr(self.config, "d_model"):
+            return FinancialTransformer(config=self.config, output_dim=1)
+        else:
+            # Fallback for old-style configs
+            return None
+
     def fit(
         self, X: pd.DataFrame, y: pd.Series, validation_data: Optional[Tuple] = None
     ) -> ModelResults:
@@ -477,14 +493,18 @@ def create_transformer_config(
     Returns:
         TransformerConfig object
     """
-    return TransformerConfig(
+    config = TransformerConfig(
         model_type="transformer",
-        d_model=d_model,
-        num_heads=num_heads,
-        num_layers=num_layers,
-        sequence_length=sequence_length,
         hyperparameters=kwargs,
         training_config={},
         validation_config={},
         feature_config={},
     )
+
+    # Set transformer-specific parameters
+    config.d_model = d_model
+    config.num_heads = num_heads
+    config.num_layers = num_layers
+    config.sequence_length = sequence_length
+
+    return config
