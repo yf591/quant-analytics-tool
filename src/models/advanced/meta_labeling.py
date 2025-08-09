@@ -96,7 +96,13 @@ class TripleBarrierLabeling:
         # Initialize results
         results = []
 
-        for event_time in events.index:
+        # Handle different event types (Series or DatetimeIndex)
+        if hasattr(events, "index"):
+            event_times = events.index
+        else:
+            event_times = events
+
+        for event_time in event_times:
             if event_time not in prices.index:
                 continue
 
@@ -301,8 +307,14 @@ class MetaLabelingModel:
             Fitted meta-labeling model
         """
         # Fit primary model first if targets provided
+        # First, fit primary model if y_primary is provided, or use dummy data
         if y_primary is not None:
             self.primary_model.fit(X, y_primary)
+        else:
+            # Create dummy binary labels for primary model training
+            # In practice, this would come from your primary strategy signals
+            dummy_y = np.random.randint(0, 2, len(X))
+            self.primary_model.fit(X, dummy_y)
 
         # Generate primary predictions
         primary_predictions = self.primary_model.predict(X)
