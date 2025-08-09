@@ -318,6 +318,66 @@ class ModelFactory:
         return list(cls._models.keys())
 
 
+class BaseFinancialModel(BaseModel):
+    """
+    Base class for financial ML models.
+
+    Extends BaseModel with financial-specific functionality
+    including time series handling, financial metrics, and
+    advanced validation techniques.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.financial_metrics = {}
+        self.time_series_cv_scores = None
+
+    def validate_financial_data(
+        self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Validate financial time series data."""
+        X_array, y_array = self._validate_input(X, y)
+
+        # Check for NaN values
+        if np.isnan(X_array).any():
+            warnings.warn("NaN values detected in features", UserWarning)
+
+        if np.isnan(y_array).any():
+            warnings.warn("NaN values detected in target", UserWarning)
+
+        return X_array, y_array
+
+    def calculate_financial_metrics(
+        self, y_true: np.ndarray, y_pred: np.ndarray
+    ) -> Dict[str, float]:
+        """Calculate financial-specific performance metrics."""
+        metrics = {}
+
+        # Basic metrics
+        if len(np.unique(y_true)) <= 10:  # Classification
+            metrics["accuracy"] = accuracy_score(y_true, y_pred)
+            if len(np.unique(y_true)) == 2:  # Binary classification
+                metrics["precision"] = precision_score(y_true, y_pred, average="binary")
+                metrics["recall"] = recall_score(y_true, y_pred, average="binary")
+                metrics["f1"] = f1_score(y_true, y_pred, average="binary")
+        else:  # Regression
+            metrics["mse"] = mean_squared_error(y_true, y_pred)
+            metrics["mae"] = mean_absolute_error(y_true, y_pred)
+            metrics["r2"] = r2_score(y_true, y_pred)
+
+        # Financial-specific metrics
+        if len(np.unique(y_true)) == 2:  # Binary trading signals
+            # Directional accuracy
+            direction_true = np.diff(y_true) > 0
+            direction_pred = np.diff(y_pred) > 0
+            if len(direction_true) > 0:
+                metrics["directional_accuracy"] = np.mean(
+                    direction_true == direction_pred
+                )
+
+        return metrics
+
+
 # Decorator for model registration
 def register_model(model_type: str):
     """Decorator for automatic model registration."""
