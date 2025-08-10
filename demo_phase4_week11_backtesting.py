@@ -20,7 +20,7 @@ This demo    # Initializ    # Create sophisticated momentum strategy
         symbols=symbols,
         short_window=20,
         long_window=50,
-        position_size=0.3  # 30% per position
+        max_position_size=0.3  # 30% per position
     )ced backtesting engine
     engine = BacktestEngine(
         initial_capital=1000000,  # $1M starting capital
@@ -269,10 +269,8 @@ def demo_advanced_metrics():
     report = create_performance_report(metrics)
     print(f"\n  ✓ Generated comprehensive performance report")
     print(f"    - Risk-adjusted returns analysis")
-    print(
-        f"    - Drawdown analysis: {report['drawdown_analysis']['avg_drawdown_duration']} days avg duration"
-    )
-    print(f"    - Win rate: {report['trade_analysis']['win_rate']}")
+    print(f"    - Average drawdown: {metrics.avg_drawdown:.3f}")
+    print(f"    - Win rate: {report['trades']['Win Rate']}")
 
     return metrics, returns_series
 
@@ -288,20 +286,21 @@ def demo_portfolio_optimization():
 
     # Add initial positions
     initial_prices = {"AAPL": 150, "MSFT": 300, "GOOGL": 2500, "TSLA": 800, "SPY": 400}
+    timestamp = datetime(2023, 1, 1)
 
     for symbol, price in initial_prices.items():
         quantity = 1000 // price  # Rough equal dollar amounts
-        portfolio.update_position(symbol, quantity, price)
+        portfolio.update_position(symbol, quantity, price, timestamp)
         print(f"    Added {quantity} shares of {symbol} at ${price}")
 
     # Update market prices
     current_prices = {"AAPL": 155, "MSFT": 310, "GOOGL": 2600, "TSLA": 850, "SPY": 410}
-    portfolio.update_prices(current_prices)
+    portfolio.update_prices(current_prices, timestamp)
 
     # Generate portfolio summary
     summary = portfolio.get_portfolio_summary()
     print(f"\n  Portfolio Summary:")
-    print(f"    Total Value: ${summary['total_market_value']:,.2f}")
+    print(f"    Total Value: ${summary['total_value']:,.2f}")
     print(f"    Total P&L: ${summary['total_pnl']:,.2f}")
     print(f"    Number of Positions: {summary['num_positions']}")
 
@@ -317,23 +316,32 @@ def demo_portfolio_optimization():
         )  # 1 year daily returns
 
     returns_df = pd.DataFrame(returns_data)
+    expected_returns = returns_df.mean() * 252  # Annualized
+    cov_matrix = returns_df.cov() * 252  # Annualized
+
+    # Import RiskModel
+    from src.backtesting.portfolio import RiskModel
 
     # Equal weight optimization
-    equal_weights = portfolio.optimize_portfolio(returns_df, method="equal_weight")
-    print(f"    Equal Weight Allocation: {dict(zip(symbols, equal_weights))}")
+    equal_weights = portfolio.optimize_portfolio(
+        expected_returns, cov_matrix, RiskModel.EQUAL_WEIGHT
+    )
+    print(f"    Equal Weight Allocation: {dict(zip(symbols, equal_weights.values()))}")
 
     # Minimum variance optimization
     min_var_weights = portfolio.optimize_portfolio(
-        returns_df, method="minimum_variance"
+        expected_returns, cov_matrix, RiskModel.MINIMUM_VARIANCE
     )
-    print(f"    Min Variance Allocation: {dict(zip(symbols, min_var_weights))}")
+    print(
+        f"    Min Variance Allocation: {dict(zip(symbols, min_var_weights.values()))}"
+    )
 
     # Risk monitoring
     risk_metrics = portfolio.calculate_portfolio_risk(returns_df)
     print(f"\n  Risk Metrics:")
     print(f"    Portfolio Volatility: {risk_metrics['portfolio_volatility']:.3f}")
-    print(f"    Portfolio Beta: {risk_metrics['portfolio_beta']:.3f}")
-    print(f"    Portfolio VaR: {risk_metrics['portfolio_var']:.3f}")
+    print(f"    Portfolio VaR: {risk_metrics['var_95']:.3f}")
+    print(f"    Portfolio CVaR: {risk_metrics['cvar_95']:.3f}")
 
     return portfolio, returns_df
 
@@ -422,7 +430,7 @@ def demo_integrated_backtest():
 
     # Initialize advanced backtesting engine
     engine = BacktestEngine(
-        initial_cash=1000000,  # $1M starting capital
+        initial_capital=1000000,  # $1M starting capital
         commission_rate=0.0005,
         slippage_rate=0.0003,
     )
@@ -435,9 +443,9 @@ def demo_integrated_backtest():
     # Create sophisticated momentum strategy
     strategy = MomentumStrategy(
         symbols=symbols,
-        fast_period=20,
-        slow_period=50,
-        position_size=0.3,  # 30% per position
+        short_window=20,
+        long_window=50,
+        max_position_size=0.3,  # 30% per position
     )
 
     # Run backtest
@@ -501,21 +509,48 @@ def demo_integrated_backtest():
     print(f"    Sortino Ratio: {metrics.sortino_ratio:.3f}")
     print(f"    Maximum Drawdown: {metrics.max_drawdown:.3f}")
     print(f"    Calmar Ratio: {metrics.calmar_ratio:.3f}")
-    print(f"    Alpha vs Benchmark: {metrics.alpha:.3f}")
-    print(f"    Information Ratio: {metrics.information_ratio:.3f}")
+    print(
+        f"    Alpha vs Benchmark: {metrics.alpha:.3f}"
+        if metrics.alpha is not None
+        else "    Alpha vs Benchmark: N/A"
+    )
+    print(
+        f"    Information Ratio: {metrics.information_ratio:.3f}"
+        if metrics.information_ratio is not None
+        else "    Information Ratio: N/A"
+    )
 
     # Portfolio analysis
     portfolio = Portfolio(initial_capital=engine.initial_capital)
 
-    # Add current positions
+    # Add current positions - check if positions_summary has data and correct structure
     current_prices = {symbol: data_dict[symbol]["Close"].iloc[-1] for symbol in symbols}
-    for position in positions_summary:
-        if position["quantity"] != 0:
-            portfolio.update_position(
-                position["symbol"],
-                position["quantity"],
-                current_prices[position["symbol"]],
-            )
+    timestamp = datetime(2023, 12, 31)
+
+    if len(positions_summary) > 0:
+        # Check if positions_summary is a DataFrame or list of dicts
+        if hasattr(positions_summary, "iterrows"):
+            # It's a DataFrame
+            for _, position in positions_summary.iterrows():
+                if position["Quantity"] != 0:
+                    portfolio.update_position(
+                        position["Symbol"],
+                        position["Quantity"],
+                        current_prices.get(
+                            position["Symbol"], 100.0
+                        ),  # Default price if not found
+                        timestamp,
+                    )
+        else:
+            # It's a list of dicts or other format
+            for position in positions_summary:
+                if isinstance(position, dict) and position.get("quantity", 0) != 0:
+                    portfolio.update_position(
+                        position["symbol"],
+                        position["quantity"],
+                        current_prices.get(position["symbol"], 100.0),
+                        timestamp,
+                    )
 
     return {
         "portfolio_values": portfolio_values,
@@ -568,10 +603,10 @@ def create_visualization(results):
     metrics = results["metrics"]
     metric_names = ["Sharpe", "Sortino", "Calmar", "Information\nRatio"]
     metric_values = [
-        metrics.sharpe_ratio,
-        metrics.sortino_ratio,
-        metrics.calmar_ratio,
-        metrics.information_ratio,
+        metrics.sharpe_ratio if metrics.sharpe_ratio is not None else 0.0,
+        metrics.sortino_ratio if metrics.sortino_ratio is not None else 0.0,
+        metrics.calmar_ratio if metrics.calmar_ratio is not None else 0.0,
+        metrics.information_ratio if metrics.information_ratio is not None else 0.0,
     ]
 
     bars = axes[1, 0].bar(
@@ -594,10 +629,25 @@ def create_visualization(results):
 
     # Position allocation
     positions = results["positions"]
-    symbols = [pos["symbol"] for pos in positions if pos["quantity"] != 0]
-    quantities = [abs(pos["quantity"]) for pos in positions if pos["quantity"] != 0]
 
-    if symbols:
+    # Handle both DataFrame and list formats
+    symbols = []
+    quantities = []
+
+    if hasattr(positions, "iterrows"):
+        # DataFrame format
+        for _, pos in positions.iterrows():
+            if pos.get("Quantity", 0) != 0:
+                symbols.append(pos.get("Symbol", "Unknown"))
+                quantities.append(abs(pos.get("Quantity", 0)))
+    else:
+        # List format
+        for pos in positions:
+            if isinstance(pos, dict) and pos.get("quantity", 0) != 0:
+                symbols.append(pos.get("symbol", "Unknown"))
+                quantities.append(abs(pos.get("quantity", 0)))
+
+    if symbols and quantities:
         axes[1, 1].pie(quantities, labels=symbols, autopct="%1.1f%%", startangle=90)
         axes[1, 1].set_title("Current Position Allocation")
     else:
@@ -659,7 +709,11 @@ def main():
         print(
             f"  • Probabilistic Sharpe Ratio: {metrics.probabilistic_sharpe_ratio:.3f}"
         )
-        print(f"  • Information Ratio: {metrics.information_ratio:.3f}")
+        print(
+            f"  • Information Ratio: {metrics.information_ratio:.3f}"
+            if metrics.information_ratio is not None
+            else "  • Information Ratio: N/A"
+        )
 
         print(f"\nExecution Quality:")
         print(f"  • Average Fill Rate: {exec_summary['summary']['fill_rate']}")
