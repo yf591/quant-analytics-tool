@@ -1,0 +1,123 @@
+{
+  "active_deployments": {
+    "production_v1_20250810_180559": {
+      "deployment_id": "production_v1_20250810_180559",
+      "deployment_name": "production_v1",
+      "model_id": "random_forest_v009_20250810_180559",
+      "model_name": "random_forest",
+      "model_version": "v009",
+      "deployment_type": "blue_green",
+      "traffic_percentage": 100.0,
+      "config": {
+        "deployment_type": "blue_green",
+        "traffic_percentage": 100.0,
+        "rollback_threshold": 0.05,
+        "monitoring_window": 24,
+        "auto_rollback": true,
+        "health_check_interval": 300
+      },
+      "description": "Week 10 demo deployment",
+      "created_at": "2025-08-10T18:05:59.351256",
+      "status": "failed",
+      "deployment_dir": "deployments/production_v1_20250810_180559",
+      "error": "New model failed health check"
+    },
+    "production_v1_20250810_180652": {
+      "deployment_id": "production_v1_20250810_180652",
+      "deployment_name": "production_v1",
+      "model_id": "random_forest_v013_20250810_180651",
+      "model_name": "random_forest",
+      "model_version": "v013",
+      "deployment_type": "blue_green",
+      "traffic_percentage": 100.0,
+      "config": {
+        "deployment_type": "blue_green",
+        "traffic_percentage": 100.0,
+        "rollback_threshold": 0.05,
+        "monitoring_window": 24,
+        "auto_rollback": true,
+        "health_check_interval": 300
+      },
+      "description": "Week 10 demo deployment",
+      "created_at": "2025-08-10T18:06:52.250487",
+      "status": "active",
+      "deployment_dir": "deployments/production_v1_20250810_180652",
+      "rollback_models": {
+        "random_forest_v014_20250810_180652": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v014_20250810_180652', model_name='random_forest', model_type='random_forest', task_type='regression', version='v014', created_at=datetime.datetime(2025, 8, 10, 18, 6, 52, 149353), file_path='models/registry/artifacts/random_forest_v014_20250810_180652.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:06:52.142986', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v013_20250810_180651": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v013_20250810_180651', model_name='random_forest', model_type='random_forest', task_type='regression', version='v013', created_at=datetime.datetime(2025, 8, 10, 18, 6, 51, 947414), file_path='models/registry/artifacts/random_forest_v013_20250810_180651.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:06:51.941919', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v012_20250810_180651": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v012_20250810_180651', model_name='random_forest', model_type='random_forest', task_type='regression', version='v012', created_at=datetime.datetime(2025, 8, 10, 18, 6, 51, 624521), file_path='models/registry/artifacts/random_forest_v012_20250810_180651.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:06:51.618772', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v011_20250810_180651": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v011_20250810_180651', model_name='random_forest', model_type='random_forest', task_type='regression', version='v011', created_at=datetime.datetime(2025, 8, 10, 18, 6, 51, 416126), file_path='models/registry/artifacts/random_forest_v011_20250810_180651.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:06:51.409515', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v010_20250810_180559": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v010_20250810_180559', model_name='random_forest', model_type='random_forest', task_type='regression', version='v010', created_at=datetime.datetime(2025, 8, 10, 18, 5, 59, 287850), file_path='models/registry/artifacts/random_forest_v010_20250810_180559.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:05:59.281560', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v009_20250810_180559": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v009_20250810_180559', model_name='random_forest', model_type='random_forest', task_type='regression', version='v009', created_at=datetime.datetime(2025, 8, 10, 18, 5, 59, 85485), file_path='models/registry/artifacts/random_forest_v009_20250810_180559.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:05:59.077954', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v008_20250810_180558": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v008_20250810_180558', model_name='random_forest', model_type='random_forest', task_type='regression', version='v008', created_at=datetime.datetime(2025, 8, 10, 18, 5, 58, 814547), file_path='models/registry/artifacts/random_forest_v008_20250810_180558.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:05:58.807426', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v007_20250810_180558": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v007_20250810_180558', model_name='random_forest', model_type='random_forest', task_type='regression', version='v007', created_at=datetime.datetime(2025, 8, 10, 18, 5, 58, 611187), file_path='models/registry/artifacts/random_forest_v007_20250810_180558.pkl', performance_metrics={'mse': 0.000399994820150014, 'feature_importance': {'returns': 0.21442844622748367, 'volatility': 0.2225331156933225, 'sma_20': 0.17386384656710768, 'sma_50': 0.16739175360568223, 'rsi': 0.2217828379064039}}, hyperparameters={}, feature_names=['returns', 'volatility', 'sma_20', 'sma_50', 'rsi'], training_data_info={'training_date': '2025-08-10T18:05:58.603982', 'feature_count': 5, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo random_forest model for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v006_20250810_175524": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v006_20250810_175524', model_name='random_forest', model_type='random_forest', task_type='regression', version='v006', created_at=datetime.datetime(2025, 8, 10, 17, 55, 24, 353796), file_path='models/registry/artifacts/random_forest_v006_20250810_175524.pkl', performance_metrics={'mse': 0.9956940539267668}, hyperparameters={}, feature_names=['returns', 'log_returns', 'price_momentum_5', 'volatility_5', 'price_momentum_10', 'volatility_10', 'price_momentum_20', 'volatility_20', 'sma_20', 'sma_50', 'ema_12', 'ema_26', 'macd_MACD', 'macd_Signal', 'macd_Histogram', 'rsi', 'stochastic_%K', 'stochastic_%D', 'williams_r', 'cci', 'momentum', 'bollinger_bands_Upper', 'bollinger_bands_Middle', 'bollinger_bands_Lower', 'atr', 'fractional_diff'], training_data_info={'training_date': '2025-08-10T17:55:24.346978', 'feature_count': 26, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo model random_forest for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v005_20250810_175521": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v005_20250810_175521', model_name='random_forest', model_type='random_forest', task_type='regression', version='v005', created_at=datetime.datetime(2025, 8, 10, 17, 55, 21, 598294), file_path='models/registry/artifacts/random_forest_v005_20250810_175521.pkl', performance_metrics={'mse': 0.9956940539267668}, hyperparameters={}, feature_names=['returns', 'log_returns', 'price_momentum_5', 'volatility_5', 'price_momentum_10', 'volatility_10', 'price_momentum_20', 'volatility_20', 'sma_20', 'sma_50', 'ema_12', 'ema_26', 'macd_MACD', 'macd_Signal', 'macd_Histogram', 'rsi', 'stochastic_%K', 'stochastic_%D', 'williams_r', 'cci', 'momentum', 'bollinger_bands_Upper', 'bollinger_bands_Middle', 'bollinger_bands_Lower', 'atr', 'fractional_diff'], training_data_info={'training_date': '2025-08-10T17:55:21.591239', 'feature_count': 26, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo model random_forest for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v004_20250810_175431": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v004_20250810_175431', model_name='random_forest', model_type='random_forest', task_type='regression', version='v004', created_at=datetime.datetime(2025, 8, 10, 17, 54, 31, 814225), file_path='models/registry/artifacts/random_forest_v004_20250810_175431.pkl', performance_metrics={'mse': 0.9956940539267668}, hyperparameters={}, feature_names=['returns', 'log_returns', 'price_momentum_5', 'volatility_5', 'price_momentum_10', 'volatility_10', 'price_momentum_20', 'volatility_20', 'sma_20', 'sma_50', 'ema_12', 'ema_26', 'macd_MACD', 'macd_Signal', 'macd_Histogram', 'rsi', 'stochastic_%K', 'stochastic_%D', 'williams_r', 'cci', 'momentum', 'bollinger_bands_Upper', 'bollinger_bands_Middle', 'bollinger_bands_Lower', 'atr', 'fractional_diff'], training_data_info={'training_date': '2025-08-10T17:54:31.806970', 'feature_count': 26, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo model random_forest for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v003_20250810_175429": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v003_20250810_175429', model_name='random_forest', model_type='random_forest', task_type='regression', version='v003', created_at=datetime.datetime(2025, 8, 10, 17, 54, 29, 76858), file_path='models/registry/artifacts/random_forest_v003_20250810_175429.pkl', performance_metrics={'mse': 0.9956940539267668}, hyperparameters={}, feature_names=['returns', 'log_returns', 'price_momentum_5', 'volatility_5', 'price_momentum_10', 'volatility_10', 'price_momentum_20', 'volatility_20', 'sma_20', 'sma_50', 'ema_12', 'ema_26', 'macd_MACD', 'macd_Signal', 'macd_Histogram', 'rsi', 'stochastic_%K', 'stochastic_%D', 'williams_r', 'cci', 'momentum', 'bollinger_bands_Upper', 'bollinger_bands_Middle', 'bollinger_bands_Lower', 'atr', 'fractional_diff'], training_data_info={'training_date': '2025-08-10T17:54:29.070804', 'feature_count': 26, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo model random_forest for Week 10 pipeline', tags=[], is_active=1)"
+        },
+        "random_forest_v002_20250810_175359": {
+          "model": "RandomForestRegressor(n_estimators=50, random_state=42)",
+          "metadata": "ModelMetadata(model_id='random_forest_v002_20250810_175359', model_name='random_forest', model_type='random_forest', task_type='regression', version='v002', created_at=datetime.datetime(2025, 8, 10, 17, 53, 59, 619495), file_path='models/registry/artifacts/random_forest_v002_20250810_175359.pkl', performance_metrics={'mse': 0.9956940539267668}, hyperparameters={}, feature_names=['returns', 'log_returns', 'price_momentum_5', 'volatility_5', 'price_momentum_10', 'volatility_10', 'price_momentum_20', 'volatility_20', 'sma_20', 'sma_50', 'ema_12', 'ema_26', 'macd_MACD', 'macd_Signal', 'macd_Histogram', 'rsi', 'stochastic_%K', 'stochastic_%D', 'williams_r', 'cci', 'momentum', 'bollinger_bands_Upper', 'bollinger_bands_Middle', 'bollinger_bands_Lower', 'atr', 'fractional_diff'], training_data_info={'training_date': '2025-08-10T17:53:59.612531', 'feature_count': 26, 'sample_count': 1411, 'data_period': '2020-2023'}, description='Demo model random_forest for Week 10 pipeline', tags=[], is_active=1)"
+        }
+      },
+      "activated_at": "2025-08-10T18:06:52.259328"
+    }
+  },
+  "deployment_history": [
+    {
+      "deployment_id": "production_v1_20250810_180559",
+      "action": "created",
+      "timestamp": "2025-08-10T18:05:59.351385",
+      "user": "system"
+    },
+    {
+      "deployment_id": "production_v1_20250810_180652",
+      "action": "created",
+      "timestamp": "2025-08-10T18:06:52.250633",
+      "user": "system"
+    },
+    {
+      "deployment_id": "production_v1_20250810_180652",
+      "action": "deployed_blue_green",
+      "timestamp": "2025-08-10T18:06:52.259372",
+      "traffic_switched": true
+    }
+  ],
+  "last_updated": "2025-08-10T18:06:52.259377"
+}
