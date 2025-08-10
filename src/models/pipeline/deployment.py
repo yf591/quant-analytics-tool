@@ -8,6 +8,7 @@ including A/B testing, canary deployments, and deployment monitoring.
 import os
 import json
 import shutil
+import joblib
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -640,7 +641,7 @@ class ModelDeployment:
                 deployments.append(deployment_info)
 
         # Sort by creation time (newest first)
-        deployments.sort(key=lambda x: x["created_at"], reverse=True)
+        deployments.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
         return deployments
 
