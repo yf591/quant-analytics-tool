@@ -67,6 +67,12 @@ Implement methodologies from "Advances in Financial Machine Learning" to develop
   - Model evaluation and cross-validation
   - Financial metrics (Sharpe, Sortino, Max drawdown)
   - Model persistence and versioning
+- **ML Pipeline System** (✅ Implemented)
+  - Automated model training pipeline with AFML-compliant time-series cross-validation
+  - Model registry with SQLite backend and staging→production workflow
+  - Real-time prediction engine with TTL caching and ensemble predictions
+  - Blue-Green & Canary deployment system with automatic rollback
+  - Continuous model monitoring with data drift detection and alerting
 - **Classification & Regression Tasks**
   - Buy/Sell/Hold three-class classification
   - Directional prediction (up/down)
