@@ -1,16 +1,21 @@
 """
-Technical# Ad# Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+Technical Indicators Demo - Phase 2 Week 4
 
-from src.data.collectors import YFinanceCollector
-from src.features.technical import TechnicalIndicators to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from src.data.collectors import YFinanceCollector
-from src.features.technical import TechnicalIndicatorscators Demo
-
-This script demonstrates the usage of technical indicators module
+This script demonstrates the comprehensive usage of technical indicators module
 with real financial data from Yahoo Finance.
+
+Features Demonstrated:
+- Moving Averages (SMA): Trend identification and price analysis
+- RSI (Relative Strength Index): Momentum oscillator for overbought/oversold conditions
+- MACD (Moving Average Convergence Divergence): Trend and momentum analysis
+- Bollinger Bands: Volatility and price range analysis
+- ATR (Average True Range): Volatility measurement
+- Stochastic Oscillator: Momentum comparison and signal generation
+
+The demo fetches live market data for Apple (AAPL) and applies all technical indicators
+to provide comprehensive market analysis with bullish/bearish signal interpretation.
+
+This validates the Week 4 technical indicators implementation for production use.
 """
 
 import sys
@@ -20,10 +25,10 @@ import pandas as pd
 import numpy as np
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from data.collectors import YFinanceCollector
-from features.technical import TechnicalIndicators
+from src.data.collectors import YFinanceCollector
+from src.features.technical import TechnicalIndicators
 
 
 def main():

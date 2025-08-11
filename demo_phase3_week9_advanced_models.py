@@ -2,24 +2,18 @@
 """
 Week 9 Advanced Models Integration Demo
 
-Quick demonstration of all implemented Advanced     # Test 5: Model Interpretation
-    print("🔍 Testing Model Interpretation...")
-    try:
-        from src.models.advanced.interpretation import FeatureImportanceAnalyzer, InterpretationConfig
-        from sklearn.ensemble import RandomForestClassifier
+Quick demonstration of all implemented Advanced Models components from Phase 3 Week 9,
+including Transformer architecture, Attention mechanisms, Ensemble methods, Meta-labeling,
+and Model interpretation tools to verify successful integration and functionality.
 
-        # Train a simple model for interpretation
-        model = RandomForestClassifier(n_estimators=20, random_state=42)
-        model.fit(X_train, y_train)
+Components Tested:
+- Transformer Models: FinancialTransformer with configurable architecture
+- Attention Mechanisms: Multi-head attention with temporal visualization
+- Ensemble Methods: FinancialRandomForest with AFML-compliant bagging
+- Meta-labeling: Triple Barrier method for financial time series
+- Model Interpretation: Feature importance analysis with SHAP integration
 
-        config = InterpretationConfig()
-        analyzer = FeatureImportanceAnalyzer(config=config)
-        importance = analyzer.analyze_tree_importance(model, feature_names=features.columns.tolist())
-
-        print(f"  ✅ FeatureImportanceAnalyzer: Analyzed {len(importance)} features")
-    except Exception as e:
-        print(f"  ❌ Interpretation test failed: {e}")s
-to verify successful integration and functionality.
+This demo validates the complete Advanced Models framework for production use.
 """
 
 import numpy as np

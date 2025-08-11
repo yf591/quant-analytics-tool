@@ -1,10 +1,15 @@
 """
 Test Suite for Portfolio Optimization Module - Week 12 Risk Management
 
-Comprehensive tests for por        # Sharpe ratio should be reasonable (allowing for negative values in test data)
-        self.assertGreater(result['sharpe_ratio'], -5)
-        self.assertLess(result['sharpe_ratio'], 10)lio optimization techniques including Modern Portfolio Theory,
-Black-Litterman, Risk Parity, HRP, and AFML-based optimization methods.
+Comprehensive tests for portfolio optimization techniques including Modern Portfolio Theory,
+Black-Litterman, Risk Parity, Hierarchical Risk Parity (HRP), and AFML-based optimization methods.
+
+Test Coverage:
+- PortfolioOptimizer: Mean-variance optimization, efficient frontier, risk parity, Black-Litterman
+- AFMLPortfolioOptimizer: Purged cross-validation, meta-labeling, ensemble optimization
+- Integration tests: Method consistency, constraint enforcement, mathematical properties
+
+Total: 31 tests ensuring robust portfolio optimization capabilities.
 """
 
 import unittest

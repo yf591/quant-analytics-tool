@@ -1,14 +1,22 @@
 """
-Test Model Monitoring System - Simplified Working Version
+Test Model Monitoring System - Week 10 ML Pipeline
 
-Tests tha        # Check database tables exist
-        with sqlite3.connect(monitor.monitoring_db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [row[0] for row in cursor.fetchall()]
-            expected_tables = ['alerts', 'prediction_logs', 'monitoring_metrics']
-            for table in expected_tables:
-                assert table in tableswith the actual ModelMonitor implementation.
+Comprehensive test suite for the model monitoring system that validates production-ready
+monitoring capabilities including data drift detection, performance tracking, alerting,
+and dashboard functionality.
+
+Test Coverage:
+- MonitoringConfig: Configuration validation and customization
+- ModelMonitor: Core monitoring functionality and database operations
+- Monitoring Interface: Start/stop monitoring, prediction logging, alert handling
+- Performance Monitoring: Data drift detection, anomaly detection, system health
+- Database Operations: SQLite storage for alerts, logs, and metrics
+- Dashboard Integration: Monitoring dashboard data retrieval
+
+This simplified working version focuses on testing the actual ModelMonitor implementation
+with graceful handling of missing dependencies while ensuring interface compatibility.
+
+Total: 15+ tests covering complete monitoring system functionality.
 """
 
 import pytest

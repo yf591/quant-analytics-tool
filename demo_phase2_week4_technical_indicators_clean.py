@@ -1,18 +1,21 @@
 """
-Technical Indicators Demo
+Technical Indicators Demo - Clean Version
 
-This     try:
-        # Create data request
-        request = DataRequest(
-            symbol=symbol,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-            interval="1d"
-        )
+This script demonstrates the usage of technical indicators module
+with real financial data from Yahoo Finance using the updated DataRequest pattern.
 
-        # Fetch data
-        data = collector.fetch_data(request)demonstrates the usage of technical indicators module
-with real financial data from Yahoo Finance.
+Features Demonstrated:
+- Modern data fetching with DataRequest objects
+- Comprehensive technical indicator analysis including:
+  * Moving Averages (SMA 20/50): Trend identification and momentum analysis
+  * RSI (Relative Strength Index): Overbought/oversold momentum detection
+  * MACD (Moving Average Convergence Divergence): Trend reversal signals
+  * Bollinger Bands: Volatility-based support/resistance levels
+  * ATR (Average True Range): Market volatility measurement
+  * Stochastic Oscillator: Momentum-based entry/exit signals
+
+Provides real-time market analysis with automated signal interpretation
+and overall market sentiment assessment for educational purposes.
 """
 
 import sys
