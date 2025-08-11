@@ -335,7 +335,7 @@ graph TB
     end
     
     subgraph "Data Sources"
-        YFINANCE[yfinance (Primary)]
+        YFINANCE[yfinance Primary]
         PANDAS_DR[pandas-datareader]
         CCXT[ccxt]
         ALPHA_VANTAGE[Alpha Vantage]
