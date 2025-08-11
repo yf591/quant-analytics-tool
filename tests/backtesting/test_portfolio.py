@@ -3,9 +3,6 @@ Tests for Portfolio Management Module
 
 Comprehensive test suite for portfolio management following AFML methodologies.
 Tests cover position management, risk monitoring, optimization, and edge cases.
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import pytest

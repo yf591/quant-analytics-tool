@@ -11,9 +11,6 @@ Test Coverage:
 - Execution simulation and reporting
 - Cost analysis and performance metrics
 - Edge cases and error handling
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import pytest

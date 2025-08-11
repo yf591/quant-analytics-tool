@@ -3,9 +3,6 @@ Tests for Backtesting Performance Metrics Module
 
 Comprehensive test suite for performance metrics calculation following AFML methodologies.
 Tests cover edge cases, mathematical accuracy, and integration scenarios.
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import pytest

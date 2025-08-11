@@ -11,9 +11,6 @@ Key Features:
 - Information ratio and tracking error
 - Probabilistic Sharpe ratio (PSR) calculation
 - Time-weighted and money-weighted returns
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import numpy as np

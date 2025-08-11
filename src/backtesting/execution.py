@@ -12,9 +12,6 @@ Key Features:
 - Slippage and transaction cost optimization
 - Multi-venue execution simulation
 - Latency and timing effects modeling
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import numpy as np

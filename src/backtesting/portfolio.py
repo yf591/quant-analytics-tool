@@ -11,9 +11,6 @@ Key Features:
 - Dynamic rebalancing strategies
 - Multi-asset portfolio support
 - Risk budgeting and allocation
-
-Author: Quantitative Analysis Team
-Version: 1.0.0
 """
 
 import numpy as np
