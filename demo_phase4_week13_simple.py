@@ -68,9 +68,10 @@ def demo_basic_analysis():
         dist_analysis = stats_analyzer.analyze_distribution(data)
 
         print(f"📋 Statistical Analysis:")
-        print(f"   Skewness: {dist_analysis.skewness:.3f}")
-        print(f"   Kurtosis: {dist_analysis.kurtosis:.3f}")
+        print(f"   Normality Test p-value: {dist_analysis.normality_p_value:.4f}")
         print(f"   Is Normal: {dist_analysis.is_normal}")
+        print(f"   Autocorrelation (lag 1): {dist_analysis.autocorrelation_lag1:.4f}")
+        print(f"   Has ARCH Effects: {dist_analysis.has_arch_effects}")
 
     except Exception as e:
         print(f"❌ Error in basic analysis: {e}")
