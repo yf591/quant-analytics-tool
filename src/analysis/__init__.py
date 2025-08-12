@@ -35,6 +35,13 @@ from .correlation import (
     calculate_rolling_correlation,
 )
 
+# Week 13: Advanced Analysis Components
+# from .walk_forward import WalkForwardAnalyzer, WalkForwardResult, ValidationMethod
+# from .monte_carlo import MonteCarloAnalyzer, SimulationResult, SimulationType, ParameterDistribution
+# from .sensitivity import SensitivityAnalyzer, SensitivityResult, SensitivityMethod, ParameterRange
+# from .stress_testing import AdvancedStressTester, BinaryStrategyParams, StressTestResult, StressTestType
+# from .performance_attribution import PerformanceAttributionAnalyzer, AttributionResult, FactorExposure, AttributionMethod
+
 __all__ = [
     # Return Analysis
     "ReturnAnalyzer",
@@ -55,6 +62,26 @@ __all__ = [
     "CorrelationAnalyzer",
     "calculate_correlation_matrix",
     "calculate_rolling_correlation",
+    # Week 13: Advanced Analysis
+    "WalkForwardAnalyzer",
+    "WalkForwardResult",
+    "ValidationMethod",
+    "MonteCarloAnalyzer",
+    "SimulationResult",
+    "SimulationType",
+    "ParameterDistribution",
+    "SensitivityAnalyzer",
+    "SensitivityResult",
+    "SensitivityMethod",
+    "ParameterRange",
+    "AdvancedStressTester",
+    "BinaryStrategyParams",
+    "StressTestResult",
+    "StressTestType",
+    "PerformanceAttributionAnalyzer",
+    "AttributionResult",
+    "FactorExposure",
+    "AttributionMethod",
 ]
 
 __version__ = "1.0.0"

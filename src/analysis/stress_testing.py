@@ -997,20 +997,35 @@ class AdvancedStressTester:
             "feasibility_assessment": {},
         }
 
-        target_sharpes = [0.5, 1.0, 1.5, 2.0, 2.5]
+        # Calculate current Sharpe ratio
+        current_sharpe = self._calculate_binary_sharpe_ratio(params)
 
-        for target_sharpe in target_sharpes:
+        # Use a more realistic range based on current performance
+        if current_sharpe > 0:
+            # Include targets both below and above current performance
+            target_sharpes = [
+                max(0.1, current_sharpe * 0.5),  # 50% of current
+                max(0.3, current_sharpe * 0.75),  # 75% of current
+                max(0.5, current_sharpe * 1.0),  # Current level
+                current_sharpe * 1.25,  # 25% improvement
+                current_sharpe * 1.5,  # 50% improvement
+            ]
+        else:
+            # Default targets for low/negative Sharpe strategies
+            target_sharpes = [0.1, 0.3, 0.5, 0.8, 1.0]
+
+        for i, target_sharpe in enumerate(target_sharpes):
             implied_precision = self._calculate_implied_precision(
                 params.stop_loss, params.profit_target, params.frequency, target_sharpe
             )
 
-            analysis["target_precision_requirements"][
-                f"sharpe_{target_sharpe}"
-            ] = implied_precision
+            sharpe_key = f"target_{i+1}_sharpe_{target_sharpe:.2f}"
+            analysis["target_precision_requirements"][sharpe_key] = implied_precision
 
             if not np.isnan(implied_precision):
                 precision_gap = implied_precision - params.precision_rate
-                analysis["precision_gap_analysis"][f"sharpe_{target_sharpe}"] = {
+                analysis["precision_gap_analysis"][sharpe_key] = {
+                    "target_sharpe": target_sharpe,
                     "required_precision": implied_precision,
                     "current_precision": params.precision_rate,
                     "precision_gap": precision_gap,
@@ -1022,21 +1037,29 @@ class AdvancedStressTester:
                 }
 
                 # Feasibility assessment
-                if implied_precision <= 1.0:
-                    if precision_gap <= 0.05:
-                        feasibility = "easily_achievable"
-                    elif precision_gap <= 0.1:
-                        feasibility = "achievable"
-                    elif precision_gap <= 0.2:
-                        feasibility = "challenging"
-                    else:
-                        feasibility = "very_difficult"
-                else:
+                if implied_precision > 1.0:
                     feasibility = "impossible"
+                elif implied_precision < 0:
+                    feasibility = "impossible"
+                elif precision_gap <= 0:
+                    feasibility = "already_achieved"
+                elif precision_gap <= 0.05:
+                    feasibility = "easily_achievable"
+                elif precision_gap <= 0.1:
+                    feasibility = "achievable"
+                elif precision_gap <= 0.2:
+                    feasibility = "challenging"
+                else:
+                    feasibility = "very_difficult"
 
-                analysis["feasibility_assessment"][
-                    f"sharpe_{target_sharpe}"
-                ] = feasibility
+                analysis["feasibility_assessment"][sharpe_key] = feasibility
+            else:
+                # Handle cases where no solution exists
+                analysis["feasibility_assessment"][sharpe_key] = "impossible"
+
+        # Ensure at least one assessment exists
+        if not analysis["feasibility_assessment"]:
+            analysis["feasibility_assessment"]["current_state"] = "analyzed"
 
         return analysis
 
