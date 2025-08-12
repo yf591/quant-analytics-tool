@@ -7,10 +7,7 @@ import pandas as pd
 import sys
 import os
 
-# Add src to path for testing
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-
-from analysis.returns import (
+from src.analysis.returns import (
     ReturnAnalyzer,
     calculate_simple_returns,
     calculate_log_returns,
