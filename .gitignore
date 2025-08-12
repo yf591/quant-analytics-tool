@@ -246,6 +246,7 @@ temp/
 
 # Implementation records (private documentation, not to be pushed)
 implementation_records/
+implementation_docs/
 dev_notes/
 progress_logs/
 deployments/
