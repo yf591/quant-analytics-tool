@@ -45,9 +45,12 @@ def display_data_metrics(
             )
 
         with col4:
-            if hasattr(data.index, "min") and hasattr(data.index, "max"):
-                date_range = (data.index.max() - data.index.min()).days
-                st.metric(label="📅 Date Range", value=f"{date_range} days")
+            if isinstance(data.index, pd.DatetimeIndex):
+                try:
+                    date_range = (data.index.max() - data.index.min()).days
+                    st.metric(label="📅 Date Range", value=f"{date_range} days")
+                except Exception:
+                    st.metric(label="📅 Data Points", value=len(data))
             else:
                 st.metric(label="📅 Data Points", value=len(data))
 
