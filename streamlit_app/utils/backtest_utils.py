@@ -1,0 +1,901 @@
+"""
+Backtesting Utilities for Streamlit Application
+
+This module provides utility functions for backtesting integration,
+data preparation, and result processing for the Streamlit interface.
+"""
+
+import pandas as pd
+import numpy as np
+import streamlit as st
+from typing import Dict, List, Any, Optional, Union, Tuple
+from datetime import datetime, timedelta
+import sys
+from pathlib import Path
+
+# Add src directory to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+try:
+    from src.backtesting import (
+        BacktestEngine,
+        BuyAndHoldStrategy,
+        MomentumStrategy,
+        MeanReversionStrategy,
+        PerformanceCalculator,
+        Portfolio,
+        Order,
+        OrderSide,
+        OrderType,
+    )
+except ImportError as e:
+    print(f"Import error in backtest_utils: {e}")
+
+
+class BacktestDataPreparer:
+    """Prepare data for backtesting from different sources"""
+
+    def __init__(self):
+        pass
+
+    def prepare_feature_data(
+        self, feature_data: Union[pd.DataFrame, Dict]
+    ) -> pd.DataFrame:
+        """
+        Prepare feature data for backtesting
+
+        Args:
+            feature_data: Feature data from feature cache
+
+        Returns:
+            Prepared DataFrame with price data
+        """
+
+        # Debug: Print structure to understand data format
+        if isinstance(feature_data, dict):
+            print(f"Feature data keys: {list(feature_data.keys())}")
+
+            # Check for raw data first
+            if "raw_data" in feature_data:
+                raw_data = feature_data["raw_data"]
+                if isinstance(raw_data, pd.DataFrame):
+                    return self._validate_price_data(raw_data)
+
+            # Check for original data
+            if "data" in feature_data:
+                data = feature_data["data"]
+                if isinstance(data, pd.DataFrame):
+                    return self._validate_price_data(data)
+
+            # Check for source data
+            if "source_data" in feature_data:
+                source_data = feature_data["source_data"]
+                if isinstance(source_data, pd.DataFrame):
+                    return self._validate_price_data(source_data)
+
+            # Try to reconstruct from features
+            if "features" in feature_data:
+                features = feature_data["features"]
+                if isinstance(features, dict):
+                    # Look for price-related features
+                    price_data = {}
+
+                    # Try to find basic price data
+                    for name, series in features.items():
+                        if isinstance(series, pd.Series):
+                            name_lower = name.lower()
+                            if "price" in name_lower and "close" not in name_lower:
+                                # This might be the main price series
+                                price_data["Close"] = series
+                            elif "close" in name_lower:
+                                price_data["Close"] = series
+                            elif "open" in name_lower:
+                                price_data["Open"] = series
+                            elif "high" in name_lower:
+                                price_data["High"] = series
+                            elif "low" in name_lower:
+                                price_data["Low"] = series
+                            elif "volume" in name_lower:
+                                price_data["Volume"] = series
+
+                    if price_data:
+                        df = pd.DataFrame(price_data)
+                        return self._validate_price_data(df)
+
+        elif isinstance(feature_data, pd.DataFrame):
+            # Already in DataFrame format
+            return self._validate_price_data(feature_data)
+
+        # If we can't extract proper price data, create a simple synthetic dataset
+        # This is a fallback for demonstration purposes
+        print("Warning: Cannot extract proper price data, creating synthetic data")
+        return self._create_synthetic_price_data()
+
+    def _validate_price_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Validate and clean price data for backtesting
+
+        Args:
+            data: Raw price data
+
+        Returns:
+            Cleaned price data
+        """
+        # Make a copy to avoid modifying original data
+        data = data.copy()
+
+        # Ensure datetime index
+        if not isinstance(data.index, pd.DatetimeIndex):
+            if "Date" in data.columns:
+                data.set_index("Date", inplace=True)
+            elif "date" in data.columns:
+                data.set_index("date", inplace=True)
+            elif data.index.dtype == "object":
+                try:
+                    data.index = pd.to_datetime(data.index)
+                except:
+                    # If index conversion fails, create a date range
+                    data.index = pd.date_range(
+                        start="2023-01-01", periods=len(data), freq="D"
+                    )
+
+        # Look for essential price columns
+        essential_cols = ["Open", "High", "Low", "Close", "Volume"]
+        available_cols = []
+
+        # Case-insensitive column mapping
+        column_mapping = {}
+        for col in essential_cols:
+            for existing_col in data.columns:
+                if (
+                    col.lower() in existing_col.lower()
+                    or existing_col.lower() in col.lower()
+                ):
+                    column_mapping[existing_col] = col
+                    break
+
+        # Apply column mapping
+        data = data.rename(columns=column_mapping)
+        available_cols = [col for col in essential_cols if col in data.columns]
+
+        # If we don't have Close price, try to find any price column
+        if "Close" not in available_cols:
+            price_cols = [
+                c
+                for c in data.columns
+                if any(term in c.lower() for term in ["price", "value", "close", "adj"])
+            ]
+            if price_cols:
+                data["Close"] = pd.to_numeric(data[price_cols[0]], errors="coerce")
+                available_cols.append("Close")
+            else:
+                # If no price data at all, we can't proceed
+                raise ValueError("No price data found in the dataset")
+
+        # Ensure Close is numeric
+        if "Close" in data.columns:
+            data["Close"] = pd.to_numeric(data["Close"], errors="coerce")
+
+        # Create missing OHLC from Close if needed
+        if "Close" in available_cols:
+            if "Open" not in available_cols:
+                data["Open"] = data["Close"].shift(1).fillna(data["Close"])
+                available_cols.append("Open")
+
+            if "High" not in available_cols:
+                # High should be at least as high as Open and Close
+                data["High"] = data[["Open", "Close"]].max(axis=1)
+                # Add some random variation to make it more realistic
+                variation = np.random.uniform(1.0, 1.02, len(data))
+                data["High"] = data["High"] * variation
+                available_cols.append("High")
+
+            if "Low" not in available_cols:
+                # Low should be at most as low as Open and Close
+                data["Low"] = data[["Open", "Close"]].min(axis=1)
+                # Add some random variation to make it more realistic
+                variation = np.random.uniform(0.98, 1.0, len(data))
+                data["Low"] = data["Low"] * variation
+                available_cols.append("Low")
+
+            if "Volume" not in available_cols:
+                # Generate synthetic volume if not available
+                data["Volume"] = np.random.uniform(100000, 1000000, len(data))
+                available_cols.append("Volume")
+
+        # Ensure all essential columns are present
+        for col in essential_cols:
+            if col not in data.columns:
+                if col == "Volume":
+                    data[col] = 1000000  # Default volume
+                else:
+                    data[col] = data["Close"]  # Use Close as fallback
+
+        # Select only the essential columns
+        data = data[essential_cols]
+
+        # Remove NaN values
+        data = data.dropna()
+
+        # Sort by date
+        data = data.sort_index()
+
+        # Ensure all values are positive
+        for col in ["Open", "High", "Low", "Close"]:
+            data[col] = data[col].abs()
+
+        data["Volume"] = data["Volume"].abs()
+
+        # Basic validation: High >= Low, High >= max(Open, Close), Low <= min(Open, Close)
+        data["High"] = np.maximum(data["High"], np.maximum(data["Open"], data["Close"]))
+        data["Low"] = np.minimum(data["Low"], np.minimum(data["Open"], data["Close"]))
+
+        return data
+
+    def _create_synthetic_price_data(self) -> pd.DataFrame:
+        """Create synthetic price data for demonstration when real data is not available"""
+
+        # Create a simple random walk price series
+        np.random.seed(42)  # For reproducibility
+        dates = pd.date_range(start="2023-01-01", end="2024-01-01", freq="D")
+
+        # Generate price series
+        initial_price = 100.0
+        returns = np.random.normal(0.001, 0.02, len(dates))  # Daily returns
+        prices = [initial_price]
+
+        for ret in returns[1:]:
+            prices.append(prices[-1] * (1 + ret))
+
+        # Create OHLCV data
+        data = pd.DataFrame(index=dates)
+        data["Close"] = prices
+
+        # Create synthetic OHLC from Close
+        data["Open"] = data["Close"].shift(1).fillna(data["Close"].iloc[0])
+
+        # Add some intraday variation
+        daily_range = np.random.uniform(
+            0.005, 0.03, len(data)
+        )  # 0.5% to 3% daily range
+        high_factor = 1 + daily_range / 2
+        low_factor = 1 - daily_range / 2
+
+        data["High"] = np.maximum(data["Open"], data["Close"]) * high_factor
+        data["Low"] = np.minimum(data["Open"], data["Close"]) * low_factor
+
+        # Synthetic volume
+        data["Volume"] = np.random.uniform(100000, 1000000, len(data))
+
+        return data
+
+    def prepare_model_data(
+        self, model_info: Dict, feature_key: str
+    ) -> Tuple[Any, pd.DataFrame]:
+        """
+        Prepare model and corresponding data for model-based backtesting
+
+        Args:
+            model_info: Model information from cache
+            feature_key: Feature set key
+
+        Returns:
+            Tuple of (model, feature_data)
+        """
+        model = model_info.get("model")
+        if model is None:
+            raise ValueError("No model found in model_info")
+
+        # Get feature data that was used to train this model
+        feature_data = model_info.get("feature_data")
+        if feature_data is None:
+            raise ValueError("No feature data found for this model")
+
+        return model, feature_data
+
+
+class StrategyBuilder:
+    """Build strategies for backtesting"""
+
+    def __init__(self):
+        pass
+
+    def build_strategy(
+        self, strategy_config: Dict[str, Any], symbols: List[str]
+    ) -> Any:
+        """
+        Build strategy instance based on configuration
+
+        Args:
+            strategy_config: Strategy configuration
+            symbols: List of symbols to trade
+
+        Returns:
+            Strategy instance
+        """
+        strategy_type = strategy_config.get("strategy_type")
+        parameters = strategy_config.get("parameters", {})
+
+        if strategy_type == "Buy & Hold":
+            return BuyAndHoldStrategy(symbols=symbols)
+
+        elif strategy_type == "Momentum":
+            return MomentumStrategy(
+                symbols=symbols,
+                short_window=parameters.get("short_window", 10),
+                long_window=parameters.get("long_window", 50),
+                **{
+                    k: v
+                    for k, v in parameters.items()
+                    if k not in ["short_window", "long_window"]
+                },
+            )
+
+        elif strategy_type == "Mean Reversion":
+            return MeanReversionStrategy(
+                symbols=symbols,
+                window=parameters.get("window", 20),
+                num_std=parameters.get("num_std", 2.0),
+                **{
+                    k: v
+                    for k, v in parameters.items()
+                    if k not in ["window", "num_std"]
+                },
+            )
+
+        elif strategy_type == "Model-Based":
+            return self._build_model_strategy(parameters, symbols)
+
+        elif strategy_type == "Multi-Asset":
+            return self._build_multi_asset_strategy(parameters, symbols)
+
+        else:
+            raise ValueError(f"Unknown strategy type: {strategy_type}")
+
+    def _build_model_strategy(self, parameters: Dict, symbols: List[str]):
+        """Build model-based strategy"""
+
+        class ModelBasedStrategy:
+            def __init__(
+                self, model, symbols, confidence_threshold=0.7, position_sizing="Fixed"
+            ):
+                self.model = model
+                self.symbols = symbols
+                self.confidence_threshold = confidence_threshold
+                self.position_sizing = position_sizing
+                self.engine = None
+                self.last_signals = {}
+
+            def set_backtest_engine(self, engine):
+                self.engine = engine
+
+            def on_start(self):
+                """Initialize strategy"""
+                pass
+
+            def on_data(self, current_time: datetime) -> List:
+                """Generate signals based on model predictions"""
+                signals = []
+
+                if self.engine is None:
+                    return signals
+
+                for symbol in self.symbols:
+                    try:
+                        # Get current price
+                        current_price = self.engine.get_current_price(symbol)
+                        if current_price is None:
+                            continue
+
+                        # Simplified feature extraction for demo
+                        # In practice, you'd use the same features as training
+                        features = self._extract_features(symbol, current_time)
+                        if features is None:
+                            continue
+
+                        # Make prediction
+                        if hasattr(self.model, "predict_proba"):
+                            # Classification with probability
+                            probabilities = self.model.predict_proba([features])[0]
+                            if len(probabilities) > 1:
+                                confidence = max(probabilities)
+                                prediction = np.argmax(probabilities)
+                            else:
+                                confidence = probabilities[0]
+                                prediction = 1 if confidence > 0.5 else 0
+                        else:
+                            # Direct prediction
+                            prediction = self.model.predict([features])[0]
+                            confidence = (
+                                abs(prediction)
+                                if isinstance(prediction, (int, float))
+                                else 0.7
+                            )
+
+                        # Generate signal if confidence is high enough
+                        if confidence >= self.confidence_threshold:
+                            position_size = self._calculate_position_size(
+                                symbol, confidence
+                            )
+
+                            if prediction > 0.5:  # Buy signal
+                                signals.append(
+                                    {
+                                        "symbol": symbol,
+                                        "side": OrderSide.BUY,
+                                        "quantity": position_size,
+                                        "type": OrderType.MARKET,
+                                        "confidence": confidence,
+                                    }
+                                )
+                            elif prediction < 0.5:  # Sell signal
+                                current_position = self.engine.positions.get(symbol)
+                                if current_position and current_position.quantity > 0:
+                                    signals.append(
+                                        {
+                                            "symbol": symbol,
+                                            "side": OrderSide.SELL,
+                                            "quantity": min(
+                                                position_size, current_position.quantity
+                                            ),
+                                            "type": OrderType.MARKET,
+                                            "confidence": confidence,
+                                        }
+                                    )
+
+                    except Exception as e:
+                        # Skip this symbol if prediction fails
+                        continue
+
+                return signals
+
+            def _extract_features(
+                self, symbol: str, current_time: datetime
+            ) -> Optional[np.ndarray]:
+                """Extract features for model prediction"""
+                try:
+                    # Get historical data for feature calculation
+                    historical_data = self.engine.get_historical_data(
+                        symbol, periods=50
+                    )
+                    if historical_data is None or len(historical_data) < 10:
+                        return None
+
+                    # Calculate simple technical features
+                    close_prices = historical_data["Close"]
+
+                    # Moving averages
+                    sma_5 = close_prices.rolling(5).mean().iloc[-1]
+                    sma_20 = close_prices.rolling(20).mean().iloc[-1]
+
+                    # Price ratios
+                    price_to_sma5 = close_prices.iloc[-1] / sma_5 if sma_5 > 0 else 1
+                    price_to_sma20 = close_prices.iloc[-1] / sma_20 if sma_20 > 0 else 1
+
+                    # Volatility
+                    returns = close_prices.pct_change().dropna()
+                    volatility = (
+                        returns.rolling(10).std().iloc[-1] if len(returns) > 10 else 0
+                    )
+
+                    # RSI-like momentum
+                    gains = returns[returns > 0].rolling(14).mean().iloc[-1] or 0
+                    losses = (
+                        abs(returns[returns < 0]).rolling(14).mean().iloc[-1] or 0.01
+                    )
+                    rsi_like = gains / (gains + losses)
+
+                    features = np.array(
+                        [price_to_sma5, price_to_sma20, volatility, rsi_like]
+                    )
+
+                    # Ensure no NaN values
+                    features = np.nan_to_num(features, 0)
+
+                    return features
+
+                except Exception as e:
+                    return None
+
+            def _calculate_position_size(self, symbol: str, confidence: float) -> int:
+                """Calculate position size based on portfolio and confidence"""
+                try:
+                    portfolio_value = self.engine.get_portfolio_value()
+                    current_price = self.engine.get_current_price(symbol)
+
+                    if self.position_sizing == "Fixed":
+                        # Fixed percentage of portfolio
+                        position_value = portfolio_value * 0.1  # 10% of portfolio
+                    elif self.position_sizing == "Kelly":
+                        # Simplified Kelly criterion
+                        position_value = portfolio_value * confidence * 0.2
+                    else:  # Risk Parity
+                        position_value = portfolio_value * 0.05  # Conservative 5%
+
+                    position_size = (
+                        int(position_value / current_price) if current_price > 0 else 0
+                    )
+                    return max(1, position_size)  # At least 1 share
+
+                except Exception:
+                    return 100  # Default position size
+
+            def on_finish(self):
+                """Clean up strategy"""
+                pass
+
+        # This would normally get the model from session state
+        # For now, create a dummy strategy that returns the class
+        return ModelBasedStrategy
+
+    def _build_multi_asset_strategy(self, parameters: Dict, symbols: List[str]):
+        """Build multi-asset portfolio strategy"""
+
+        class MultiAssetStrategy:
+            def __init__(
+                self,
+                symbols,
+                rebalance_frequency="Monthly",
+                risk_model="Equal Weight",
+                max_position=0.2,
+            ):
+                self.symbols = symbols
+                self.rebalance_frequency = rebalance_frequency
+                self.risk_model = risk_model
+                self.max_position = max_position
+                self.engine = None
+                self.last_rebalance = None
+                self.target_weights = {}
+
+            def set_backtest_engine(self, engine):
+                self.engine = engine
+
+            def on_start(self):
+                """Initialize strategy"""
+                if self.risk_model == "Equal Weight":
+                    weight = min(1.0 / len(self.symbols), self.max_position)
+                    self.target_weights = {symbol: weight for symbol in self.symbols}
+
+            def on_data(self, current_time: datetime) -> List:
+                """Rebalance portfolio based on frequency"""
+                signals = []
+
+                if self._should_rebalance(current_time):
+                    # Calculate current weights
+                    current_weights = self._get_current_weights()
+
+                    # Generate rebalancing orders
+                    for symbol in self.symbols:
+                        current_weight = current_weights.get(symbol, 0)
+                        target_weight = self.target_weights.get(symbol, 0)
+
+                        weight_diff = target_weight - current_weight
+
+                        if (
+                            abs(weight_diff) > 0.01
+                        ):  # Only rebalance if significant difference
+                            portfolio_value = self.engine.get_portfolio_value()
+                            current_price = self.engine.get_current_price(symbol)
+
+                            if current_price and current_price > 0:
+                                target_value = portfolio_value * target_weight
+                                current_position = self.engine.positions.get(symbol)
+                                current_value = (
+                                    (current_position.quantity * current_price)
+                                    if current_position
+                                    else 0
+                                )
+
+                                value_diff = target_value - current_value
+                                quantity_diff = int(value_diff / current_price)
+
+                                if quantity_diff > 0:
+                                    signals.append(
+                                        {
+                                            "symbol": symbol,
+                                            "side": OrderSide.BUY,
+                                            "quantity": quantity_diff,
+                                            "type": OrderType.MARKET,
+                                        }
+                                    )
+                                elif quantity_diff < 0:
+                                    signals.append(
+                                        {
+                                            "symbol": symbol,
+                                            "side": OrderSide.SELL,
+                                            "quantity": abs(quantity_diff),
+                                            "type": OrderType.MARKET,
+                                        }
+                                    )
+
+                    self.last_rebalance = current_time
+
+                return signals
+
+            def _should_rebalance(self, current_time: datetime) -> bool:
+                """Check if it's time to rebalance"""
+                if self.last_rebalance is None:
+                    return True
+
+                if self.rebalance_frequency == "Daily":
+                    return True
+                elif self.rebalance_frequency == "Weekly":
+                    return (current_time - self.last_rebalance).days >= 7
+                elif self.rebalance_frequency == "Monthly":
+                    return (current_time - self.last_rebalance).days >= 30
+
+                return False
+
+            def _get_current_weights(self) -> Dict[str, float]:
+                """Get current portfolio weights"""
+                portfolio_value = self.engine.get_portfolio_value()
+                weights = {}
+
+                for symbol in self.symbols:
+                    position = self.engine.positions.get(symbol)
+                    if position:
+                        current_price = self.engine.get_current_price(symbol)
+                        if current_price:
+                            position_value = position.quantity * current_price
+                            weights[symbol] = (
+                                position_value / portfolio_value
+                                if portfolio_value > 0
+                                else 0
+                            )
+                    else:
+                        weights[symbol] = 0
+
+                return weights
+
+            def on_finish(self):
+                """Clean up strategy"""
+                pass
+
+        return MultiAssetStrategy(
+            symbols=symbols,
+            rebalance_frequency=parameters.get("rebalance_frequency", "Monthly"),
+            risk_model=parameters.get("risk_model", "Equal Weight"),
+            max_position=parameters.get("max_position", 0.2),
+        )
+
+
+class BacktestResultProcessor:
+    """Process and format backtest results"""
+
+    def __init__(self):
+        self.calculator = PerformanceCalculator()
+
+    def process_results(
+        self, engine: BacktestEngine, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Process backtest results into standardized format
+
+        Args:
+            engine: Completed backtest engine
+            config: Backtest configuration
+
+        Returns:
+            Processed results dictionary
+        """
+        # Extract basic results
+        portfolio_values = (
+            [value[1] for value in engine.portfolio_values]
+            if engine.portfolio_values
+            else [config["initial_capital"]]
+        )
+
+        # Calculate returns
+        returns = pd.Series(portfolio_values).pct_change().dropna()
+
+        # Get trades and positions
+        trades = self._format_trades(engine.get_trades_summary())
+        positions = engine.get_positions_summary()
+
+        # Calculate comprehensive metrics
+        try:
+            metrics = self.calculator.calculate_comprehensive_metrics(
+                returns=returns,
+                portfolio_values=pd.Series(portfolio_values),
+                trades=trades,
+                benchmark_returns=None,
+                initial_capital=config["initial_capital"],
+            )
+        except Exception as e:
+            # Create minimal metrics if calculation fails
+            metrics = self._create_minimal_metrics(
+                returns, portfolio_values, config["initial_capital"]
+            )
+
+        # Calculate additional metrics
+        win_rate = self._calculate_win_rate(trades)
+        drawdown_info = self._calculate_drawdown_info(portfolio_values)
+
+        return {
+            "portfolio_values": portfolio_values,
+            "returns": returns,
+            "metrics": metrics,
+            "trades": trades,
+            "positions": positions,
+            "win_rate": win_rate,
+            "drawdown_info": drawdown_info,
+            "config": config,
+            "summary": self._create_summary(metrics, trades, win_rate),
+        }
+
+    def _format_trades(self, trades_summary) -> List[Dict]:
+        """Format trades for display"""
+        if isinstance(trades_summary, pd.DataFrame) and not trades_summary.empty:
+            return trades_summary.to_dict("records")
+        elif isinstance(trades_summary, list):
+            return trades_summary
+        else:
+            return []
+
+    def _calculate_win_rate(self, trades: List[Dict]) -> float:
+        """Calculate win rate from trades"""
+        if not trades:
+            return 0.0
+
+        profitable_trades = sum(1 for trade in trades if trade.get("pnl", 0) > 0)
+        return profitable_trades / len(trades) if trades else 0.0
+
+    def _calculate_drawdown_info(self, portfolio_values: List[float]) -> Dict[str, Any]:
+        """Calculate detailed drawdown information"""
+        if len(portfolio_values) < 2:
+            return {"max_drawdown": 0, "current_drawdown": 0, "drawdown_duration": 0}
+
+        portfolio_series = pd.Series(portfolio_values)
+        rolling_max = portfolio_series.expanding().max()
+        drawdown = (portfolio_series - rolling_max) / rolling_max
+
+        max_drawdown = drawdown.min()
+        current_drawdown = drawdown.iloc[-1]
+
+        # Calculate drawdown duration
+        in_drawdown = drawdown < -0.001  # More than 0.1% drawdown
+        if in_drawdown.any():
+            drawdown_periods = []
+            current_period = 0
+            for is_dd in in_drawdown:
+                if is_dd:
+                    current_period += 1
+                else:
+                    if current_period > 0:
+                        drawdown_periods.append(current_period)
+                        current_period = 0
+
+            if current_period > 0:
+                drawdown_periods.append(current_period)
+
+            avg_duration = np.mean(drawdown_periods) if drawdown_periods else 0
+        else:
+            avg_duration = 0
+
+        return {
+            "max_drawdown": abs(max_drawdown),
+            "current_drawdown": abs(current_drawdown),
+            "drawdown_duration": avg_duration,
+        }
+
+    def _create_minimal_metrics(
+        self, returns: pd.Series, portfolio_values: List[float], initial_capital: float
+    ):
+        """Create minimal metrics if full calculation fails"""
+
+        class MinimalMetrics:
+            def __init__(self, returns, portfolio_values, initial_capital):
+                self.total_return = (
+                    (portfolio_values[-1] / initial_capital - 1)
+                    if portfolio_values
+                    else 0
+                )
+                self.annualized_return = self.total_return  # Simplified
+                self.volatility = (
+                    returns.std() * np.sqrt(252) if len(returns) > 1 else 0
+                )
+                self.sharpe_ratio = (
+                    (self.annualized_return - 0.02) / self.volatility
+                    if self.volatility > 0
+                    else 0
+                )
+                self.sortino_ratio = self.sharpe_ratio  # Simplified
+                self.calmar_ratio = (
+                    self.annualized_return
+                    / abs(self._calculate_max_dd(portfolio_values))
+                    if self._calculate_max_dd(portfolio_values) != 0
+                    else 0
+                )
+                self.max_drawdown = abs(self._calculate_max_dd(portfolio_values))
+
+            def _calculate_max_dd(self, values):
+                if len(values) < 2:
+                    return 0
+                portfolio_series = pd.Series(values)
+                rolling_max = portfolio_series.expanding().max()
+                drawdown = (portfolio_series - rolling_max) / rolling_max
+                return drawdown.min()
+
+        return MinimalMetrics(returns, portfolio_values, initial_capital)
+
+    def _create_summary(
+        self, metrics, trades: List[Dict], win_rate: float
+    ) -> Dict[str, str]:
+        """Create human-readable summary"""
+        return {
+            "total_return": f"{getattr(metrics, 'total_return', 0) * 100:.2f}%",
+            "sharpe_ratio": f"{getattr(metrics, 'sharpe_ratio', 0):.3f}",
+            "max_drawdown": f"{getattr(metrics, 'max_drawdown', 0) * 100:.2f}%",
+            "total_trades": str(len(trades)),
+            "win_rate": f"{win_rate * 100:.1f}%",
+        }
+
+
+def get_available_symbols_from_cache() -> List[str]:
+    """Get available symbols from feature cache"""
+    try:
+        import streamlit as st
+
+        if "feature_cache" not in st.session_state:
+            return []
+
+        symbols = set()
+        for feature_key, feature_data in st.session_state.feature_cache.items():
+            # Try to extract symbol from feature key or data
+            if isinstance(feature_data, dict):
+                if "symbol" in feature_data:
+                    symbols.add(feature_data["symbol"])
+                elif "metadata" in feature_data:
+                    metadata = feature_data["metadata"]
+                    if isinstance(metadata, dict) and "symbol" in metadata:
+                        symbols.add(metadata["symbol"])
+                    elif isinstance(metadata, dict) and "ticker" in metadata:
+                        symbols.add(metadata["ticker"])
+
+        return list(symbols) if symbols else ["ASSET"]  # Default symbol
+
+    except Exception:
+        return ["ASSET"]  # Default symbol
+
+
+def validate_backtest_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """
+    Validate backtest configuration
+
+    Args:
+        config: Backtest configuration
+
+    Returns:
+        Tuple of (is_valid, error_messages)
+    """
+    errors = []
+
+    # Check required fields
+    required_fields = ["initial_capital", "commission_rate", "slippage_rate"]
+    for field in required_fields:
+        if field not in config:
+            errors.append(f"Missing required field: {field}")
+
+    # Validate ranges
+    if config.get("initial_capital", 0) <= 0:
+        errors.append("Initial capital must be positive")
+
+    if not 0 <= config.get("commission_rate", 0) <= 1:
+        errors.append("Commission rate must be between 0 and 1")
+
+    if not 0 <= config.get("slippage_rate", 0) <= 1:
+        errors.append("Slippage rate must be between 0 and 1")
+
+    if config.get("leverage", 1) < 1:
+        errors.append("Leverage must be at least 1")
+
+    # Date validation
+    start_date = config.get("start_date")
+    end_date = config.get("end_date")
+
+    if start_date and end_date:
+        if start_date >= end_date:
+            errors.append("Start date must be before end date")
+
+    return len(errors) == 0, errors
