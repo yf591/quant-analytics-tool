@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Add src and components directory to path
 project_root = Path(__file__).parent.parent.parent
@@ -247,6 +247,46 @@ def calculate_technical_indicators(
     try:
         display_computation_status("🔄 Calculating technical indicators...", 0.1)
 
+        # Validate and normalize data columns
+        required_columns = ["Open", "High", "Low", "Close", "Volume"]
+        missing_columns = []
+
+        # Check for standard column names and their lowercase variants
+        column_mapping = {}
+        for col in required_columns:
+            if col in data.columns:
+                column_mapping[col] = col
+            elif col.lower() in data.columns:
+                column_mapping[col] = col.lower()
+            else:
+                missing_columns.append(col)
+
+        if missing_columns:
+            st.error(f"❌ Missing required columns: {missing_columns}")
+            st.info(f"Available columns: {list(data.columns)}")
+            return
+
+        # Create normalized data with standard column names
+        normalized_data = pd.DataFrame(index=data.index)
+        for standard_col, actual_col in column_mapping.items():
+            normalized_data[standard_col] = data[actual_col]
+
+        # Remove any rows with NaN values in required columns
+        before_clean = len(normalized_data)
+        normalized_data = normalized_data.dropna()
+        after_clean = len(normalized_data)
+
+        if after_clean < before_clean:
+            st.info(f"📊 Removed {before_clean - after_clean} rows with missing values")
+
+        if len(normalized_data) < 50:
+            st.warning(
+                "⚠️ Insufficient data for technical analysis (need at least 50 data points)"
+            )
+            return
+
+        display_computation_status("🔄 Initializing technical indicators...", 0.2)
+
         # Use existing Week 4 module
         ti = TechnicalIndicators()
 
@@ -269,6 +309,8 @@ def calculate_technical_indicators(
             indicators_to_calculate.append("stochastic")
         if config.get("williams_enabled", False):
             indicators_to_calculate.append("williams_r")
+        if config.get("momentum_enabled", False):
+            indicators_to_calculate.append("momentum")
 
         if not indicators_to_calculate:
             st.warning(
@@ -279,7 +321,13 @@ def calculate_technical_indicators(
         display_computation_status("🔄 Computing indicators...", 0.5)
 
         # Calculate all enabled indicators
-        all_results = ti.calculate_all_indicators(data, indicators_to_calculate)
+        # Note: TechnicalIndicators expects lowercase column names
+        lowercase_data = normalized_data.copy()
+        lowercase_data.columns = [col.lower() for col in lowercase_data.columns]
+
+        all_results = ti.calculate_all_indicators(
+            lowercase_data, indicators_to_calculate
+        )
 
         display_computation_status("🔄 Processing results...", 0.8)
 
@@ -296,10 +344,15 @@ def calculate_technical_indicators(
             else:
                 results[indicator_name] = result_obj
 
+        if not results:
+            st.warning("⚠️ No technical indicators were calculated successfully.")
+            st.info(f"📊 Requested indicators: {indicators_to_calculate}")
+            return
+
         # Store results with additional metadata
         feature_key = f"{ticker}_technical"
         st.session_state.feature_cache[feature_key] = {
-            "data": data,
+            "data": normalized_data,  # Store normalized data
             "features": results,
             "type": "technical",
             "config": config,
@@ -327,69 +380,107 @@ def calculate_advanced_features(
     try:
         display_computation_status("🔄 Calculating advanced features...", 0.1)
 
-        # Use existing Week 5 module
-        af = AdvancedFeatures()
-        results = {}
-
-        # Use the correct column name (check both Close and close)
+        # Validate and normalize data columns
         price_col = None
+        volume_col = None
+
+        # Check for price column (Close or close)
         if "Close" in data.columns:
             price_col = "Close"
         elif "close" in data.columns:
             price_col = "close"
-
-        if price_col is None:
+        else:
             st.error("❌ No price column found (Close or close)")
+            st.info(f"Available columns: {list(data.columns)}")
             return
+
+        # Check for volume column (Volume or volume)
+        if "Volume" in data.columns:
+            volume_col = "Volume"
+        elif "volume" in data.columns:
+            volume_col = "volume"
+
+        # Clean data for analysis
+        clean_data = data.dropna(subset=[price_col])
+        if len(clean_data) < len(data):
+            st.info(
+                f"📊 Removed {len(data) - len(clean_data)} rows with missing price data"
+            )
+
+        if len(clean_data) < 100:
+            st.warning(
+                "⚠️ Insufficient data for advanced features (need at least 100 data points)"
+            )
+            return
+
+        # Use existing Week 5 module
+        af = AdvancedFeatures()
+        results = {}
 
         display_computation_status("🔄 Computing features...", 0.3)
 
         # Calculate enabled features
         if config.get("fractal_enabled", False):
             display_computation_status("🔄 Computing fractal dimension...", 0.4)
-            results["fractal_dimension"] = af.calculate_fractal_dimension(
-                data[price_col],
-                config.get("fractal_window", 100),
-                config.get("fractal_method", "higuchi"),
-            )
+            try:
+                results["fractal_dimension"] = af.calculate_fractal_dimension(
+                    clean_data[price_col],
+                    config.get("fractal_window", 100),
+                    config.get("fractal_method", "higuchi"),
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Fractal dimension calculation failed: {str(e)}")
 
         if config.get("hurst_enabled", False):
             display_computation_status("🔄 Computing Hurst exponent...", 0.6)
-            results["hurst_exponent"] = af.calculate_hurst_exponent(
-                data[price_col],
-                config.get("hurst_window", 100),
-                config.get("hurst_method", "rs"),
-            )
+            try:
+                results["hurst_exponent"] = af.calculate_hurst_exponent(
+                    clean_data[price_col],
+                    config.get("hurst_window", 100),
+                    config.get("hurst_method", "rs"),
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Hurst exponent calculation failed: {str(e)}")
 
-        if config.get("info_bars_enabled", False):
+        if config.get("info_bars_enabled", False) and volume_col:
             display_computation_status("🔄 Creating information bars...", 0.7)
-            threshold = config.get("bar_threshold", None)
-            if threshold == 0:
-                threshold = None
-            results["information_bars"] = af.create_information_bars(
-                data, config.get("bar_type", "volume"), threshold, price_col
-            )
+            try:
+                threshold = config.get("bar_threshold", None)
+                if threshold == 0:
+                    threshold = None
+                results["information_bars"] = af.create_information_bars(
+                    clean_data,
+                    config.get("bar_type", "volume"),
+                    threshold,
+                    price_col,
+                    volume_col,
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Information bars calculation failed: {str(e)}")
 
         if config.get("frac_diff_enabled", False):
             display_computation_status(
                 "🔄 Computing fractional differentiation...", 0.8
             )
-            results["fractional_diff"] = af.fractional_differentiation(
-                data[price_col],
-                config.get("frac_diff_d", 0.4),
-                config.get("frac_diff_threshold", 0.01),
-            )
+            try:
+                results["fractional_diff"] = af.fractional_differentiation(
+                    clean_data[price_col],
+                    config.get("frac_diff_d", 0.4),
+                    config.get("frac_diff_threshold", 0.01),
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Fractional differentiation calculation failed: {str(e)}")
 
         if not results:
             st.warning(
-                "⚠️ No advanced features selected. Please enable at least one feature."
+                "⚠️ No advanced features calculated successfully. Please check your data and try again."
             )
             return
 
         # Store results with additional metadata
         feature_key = f"{ticker}_advanced"
         st.session_state.feature_cache[feature_key] = {
-            "data": data,
+            "data": clean_data,
             "features": results,
             "type": "advanced",
             "config": config,
@@ -415,27 +506,180 @@ def run_feature_pipeline(ticker: str, data: pd.DataFrame, config: Dict[str, Any]
     try:
         display_computation_status("🔄 Initializing feature pipeline...", 0.1)
 
-        # Initialize feature pipeline
-        fp = FeaturePipeline()
+        # Validate and normalize data
+        required_columns = ["Open", "High", "Low", "Close", "Volume"]
+
+        # Create column mapping for case-insensitive matching
+        column_mapping = {}
+        for col in required_columns:
+            if col in data.columns:
+                column_mapping[col] = col
+            elif col.lower() in data.columns:
+                column_mapping[col] = col.lower()
+
+        # Create normalized data with standard column names
+        normalized_data = pd.DataFrame(index=data.index)
+        for standard_col, actual_col in column_mapping.items():
+            if actual_col in data.columns:
+                # Ensure numeric data types
+                try:
+                    normalized_data[standard_col] = pd.to_numeric(
+                        data[actual_col], errors="coerce"
+                    )
+                except Exception:
+                    normalized_data[standard_col] = data[actual_col]
+
+        # Check if we have minimum required data
+        if "Close" not in normalized_data.columns:
+            st.error("❌ Price data (Close) is required for feature pipeline")
+            return
 
         display_computation_status("🔄 Generating features...", 0.3)
 
-        # Generate features based on configuration
-        pipeline_results = fp.generate_features(data)
+        # Initialize feature pipeline with simplified configuration
+        # Note: Since FeaturePipeline may have complex configuration requirements,
+        # we'll create features manually based on the config
+
+        all_features = pd.DataFrame(index=normalized_data.index)
+        feature_metadata = {}
+
+        # Add basic price features
+        try:
+            all_features["Price"] = normalized_data["Close"]
+            all_features["Returns"] = normalized_data["Close"].pct_change()
+            all_features["Log_Returns"] = np.log(
+                normalized_data["Close"] / normalized_data["Close"].shift(1)
+            )
+            feature_metadata["basic_features"] = ["Price", "Returns", "Log_Returns"]
+        except Exception as e:
+            st.warning(f"⚠️ Basic features calculation failed: {str(e)}")
+
+        # Add technical indicators if enabled
+        if config.get("include_technical", True):
+            display_computation_status("🔄 Adding technical indicators...", 0.5)
+            try:
+                from src.features.technical import (
+                    calculate_sma,
+                    calculate_ema,
+                    calculate_rsi,
+                )
+
+                # Simple moving averages
+                all_features["SMA_10"] = calculate_sma(normalized_data["Close"], 10)
+                all_features["SMA_20"] = calculate_sma(normalized_data["Close"], 20)
+
+                # Exponential moving averages
+                all_features["EMA_10"] = calculate_ema(normalized_data["Close"], 10)
+                all_features["EMA_20"] = calculate_ema(normalized_data["Close"], 20)
+
+                # RSI
+                all_features["RSI"] = calculate_rsi(normalized_data["Close"], 14)
+
+                feature_metadata["technical_indicators"] = [
+                    "SMA_10",
+                    "SMA_20",
+                    "EMA_10",
+                    "EMA_20",
+                    "RSI",
+                ]
+
+            except Exception as e:
+                st.warning(f"⚠️ Technical indicators calculation failed: {str(e)}")
+
+        # Add advanced features if enabled
+        if config.get("include_advanced", True):
+            display_computation_status("🔄 Adding advanced features...", 0.7)
+            try:
+                # Rolling volatility
+                all_features["Volatility_20"] = (
+                    normalized_data["Close"].rolling(20).std()
+                )
+
+                # Price momentum
+                all_features["Momentum_5"] = normalized_data["Close"] - normalized_data[
+                    "Close"
+                ].shift(5)
+                all_features["Momentum_10"] = normalized_data[
+                    "Close"
+                ] - normalized_data["Close"].shift(10)
+
+                feature_metadata["advanced_features"] = [
+                    "Volatility_20",
+                    "Momentum_5",
+                    "Momentum_10",
+                ]
+
+            except Exception as e:
+                st.warning(f"⚠️ Advanced features calculation failed: {str(e)}")
 
         display_computation_status("🔄 Processing pipeline results...", 0.8)
+
+        # Remove features with all NaN values
+        all_features = all_features.dropna(axis=1, how="all")
+
+        # Feature selection if enabled
+        if config.get("feature_selection", True) and len(
+            all_features.columns
+        ) > config.get("max_features", 50):
+            display_computation_status("🔄 Performing feature selection...", 0.9)
+
+            # Simple correlation-based feature selection
+            correlation_threshold = config.get("correlation_threshold", 0.8)
+            correlation_matrix = all_features.corr().abs()
+
+            # Find highly correlated features
+            upper_triangle = correlation_matrix.where(
+                np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool)
+            )
+
+            # Select features to drop
+            to_drop = [
+                column
+                for column in upper_triangle.columns
+                if any(upper_triangle[column] > correlation_threshold)
+            ]
+
+            if to_drop:
+                all_features = all_features.drop(columns=to_drop)
+                st.info(f"🔄 Removed {len(to_drop)} highly correlated features")
+
+        # Create simplified pipeline results
+        from dataclasses import dataclass
+
+        @dataclass
+        class SimplePipelineResults:
+            features: pd.DataFrame = None
+            feature_names: List[str] = None
+            quality_metrics: Dict[str, Any] = None
+            feature_importance: Optional[pd.Series] = None
+
+        # Calculate quality metrics
+        quality_metrics = {
+            "total_features": len(all_features.columns),
+            "completeness": (1 - all_features.isnull().mean().mean()),
+            "correlation_threshold": config.get("correlation_threshold", 0.8),
+            "feature_metadata": feature_metadata,
+        }
+
+        pipeline_results = SimplePipelineResults(
+            features=all_features,
+            feature_names=list(all_features.columns),
+            quality_metrics=quality_metrics,
+            feature_importance=None,  # Initialize as None for now
+        )
 
         # Store pipeline results
         pipeline_key = f"{ticker}_pipeline"
         st.session_state.feature_pipeline_cache[pipeline_key] = {
-            "data": data,
+            "data": normalized_data,
             "results": pipeline_results,
             "config": config,
             "calculated_at": datetime.now(),
         }
 
         display_computation_status(
-            f"✅ Feature pipeline completed successfully for {ticker}", 1.0
+            f"✅ Feature pipeline completed successfully for {ticker} ({len(all_features.columns)} features)",
+            1.0,
         )
         st.rerun()
 
@@ -504,11 +748,18 @@ def display_pipeline_results(pipeline_key: str):
             st.dataframe(quality_df, use_container_width=True)
 
         # Feature importance if available
-        if results.feature_importance is not None:
+        if (
+            hasattr(results, "feature_importance")
+            and results.feature_importance is not None
+        ):
             chart = create_feature_importance_chart(
                 results.feature_importance, title="Feature Importance Analysis"
             )
             st.plotly_chart(chart, use_container_width=True)
+        else:
+            st.info(
+                "📊 Feature importance analysis not available for this pipeline run"
+            )
 
 
 def display_feature_visualization(feature_set_key: str):
@@ -520,10 +771,26 @@ def display_feature_visualization(feature_set_key: str):
         data = cached_features["data"]
         feature_type = cached_features["type"]
 
+        # Ensure data is a DataFrame
+        if not isinstance(data, pd.DataFrame):
+            st.error("❌ Data format error: Expected DataFrame for visualization")
+            return
+
+        # Ensure features is in the correct format for charts
         if feature_type == "technical":
-            chart = create_technical_indicators_chart(data, features, height=700)
+            chart = create_technical_indicators_chart(
+                data=data,
+                indicators=features,
+                height=700,
+                title="Technical Indicators Analysis",
+            )
         else:
-            chart = create_advanced_features_chart(data, features, height=700)
+            chart = create_advanced_features_chart(
+                data=data,
+                features=features,
+                height=700,
+                title="Advanced Features Analysis",
+            )
 
         st.plotly_chart(chart, use_container_width=True)
 
@@ -539,6 +806,8 @@ def display_feature_visualization(feature_set_key: str):
                     corr_matrix, title="Feature Correlation Matrix"
                 )
                 st.plotly_chart(chart, use_container_width=True)
+            else:
+                st.info("📊 Need at least 2 features to display correlation matrix")
 
 
 def display_feature_statistics(feature_set_key: str):

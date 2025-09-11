@@ -36,8 +36,36 @@ def create_price_chart(
         Plotly figure object
     """
     try:
+        # Flexible column name handling
+        actual_price_col = None
+        actual_volume_col = None
+
+        # Find price column (case-insensitive)
+        for col in data.columns:
+            if col.lower() == price_col.lower():
+                actual_price_col = col
+                break
+
+        if actual_price_col is None:
+            # Try common alternatives
+            for alt_col in ["Close", "close", "CLOSE", "Price", "price"]:
+                if alt_col in data.columns:
+                    actual_price_col = alt_col
+                    break
+
+        if actual_price_col is None:
+            st.error(f"Price column '{price_col}' not found in data")
+            return go.Figure()
+
+        # Find volume column if specified
+        if volume_col:
+            for col in data.columns:
+                if col.lower() == volume_col.lower():
+                    actual_volume_col = col
+                    break
+
         # Create subplots if volume is available
-        if volume_col and volume_col in data.columns:
+        if actual_volume_col and actual_volume_col in data.columns:
             fig = make_subplots(
                 rows=2,
                 cols=1,
@@ -51,7 +79,7 @@ def create_price_chart(
             fig.add_trace(
                 go.Scatter(
                     x=data.index,
-                    y=data[price_col],
+                    y=data[actual_price_col],
                     mode="lines",
                     name="Price",
                     line=dict(color="#1f77b4", width=2),
@@ -65,7 +93,7 @@ def create_price_chart(
             fig.add_trace(
                 go.Bar(
                     x=data.index,
-                    y=data[volume_col],
+                    y=data[actual_volume_col],
                     name="Volume",
                     marker_color="#ff7f0e",
                     opacity=0.7,
@@ -80,7 +108,7 @@ def create_price_chart(
             fig.add_trace(
                 go.Scatter(
                     x=data.index,
-                    y=data[price_col],
+                    y=data[actual_price_col],
                     mode="lines",
                     name="Price",
                     line=dict(color="#1f77b4", width=2),
@@ -130,6 +158,29 @@ def create_technical_indicators_chart(
         if indicators is None:
             indicators = {}
 
+        # Validate data input
+        if not isinstance(data, pd.DataFrame):
+            st.error(f"Error: Expected DataFrame, got {type(data)}")
+            return go.Figure()
+
+        # Flexible column name handling for price
+        actual_price_col = None
+        for col in data.columns:
+            if col.lower() == price_col.lower():
+                actual_price_col = col
+                break
+
+        if actual_price_col is None:
+            # Try common alternatives
+            for alt_col in ["Close", "close", "CLOSE", "Price", "price"]:
+                if alt_col in data.columns:
+                    actual_price_col = alt_col
+                    break
+
+        if actual_price_col is None:
+            st.error(f"Price column '{price_col}' not found in data")
+            return go.Figure()
+
         # Create subplots
         fig = make_subplots(
             rows=3,
@@ -148,7 +199,7 @@ def create_technical_indicators_chart(
         fig.add_trace(
             go.Scatter(
                 x=data.index,
-                y=data[price_col],
+                y=data[actual_price_col],
                 mode="lines",
                 name="Price",
                 line=dict(color="#1f77b4", width=2),
@@ -344,6 +395,16 @@ def create_advanced_features_chart(
         Plotly figure object
     """
     try:
+        # Validate data input
+        if not isinstance(data, pd.DataFrame):
+            st.error(f"Error: Expected DataFrame, got {type(data)}")
+            return go.Figure()
+
+        # Validate features input
+        if not isinstance(features, dict):
+            st.error(f"Error: Expected dict for features, got {type(features)}")
+            return go.Figure()
+
         fig = make_subplots(
             rows=len(features) + 1,
             cols=1,
@@ -352,12 +413,25 @@ def create_advanced_features_chart(
             subplot_titles=["Price"] + list(features.keys()),
         )
 
-        # Price chart
-        if "Close" in data.columns:
+        # Price chart - use flexible column matching
+        price_col = None
+        for col in data.columns:
+            if col.lower() in ["close", "price"]:
+                price_col = col
+                break
+
+        if price_col is None:
+            # Try common alternatives
+            for alt_col in ["Close", "CLOSE", "Price", "PRICE"]:
+                if alt_col in data.columns:
+                    price_col = alt_col
+                    break
+
+        if price_col and price_col in data.columns:
             fig.add_trace(
                 go.Scatter(
                     x=data.index,
-                    y=data["Close"],
+                    y=data[price_col],
                     mode="lines",
                     name="Price",
                     line=dict(color="#1f77b4"),

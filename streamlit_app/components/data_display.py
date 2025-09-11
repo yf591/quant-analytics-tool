@@ -163,11 +163,14 @@ def display_feature_table(
         # Download button
         if len(feature_df) > 0:
             csv_data = feature_df.to_csv()
+            # Create unique key based on title and timestamp
+            unique_key = f"download_{title.replace(' ', '_').replace('📊', '').replace('🧠', '').replace('⚡', '').strip()}_{int(datetime.now().timestamp())}"
             st.download_button(
                 label="📥 Download Features as CSV",
                 data=csv_data,
                 file_name=f"features_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
+                key=unique_key,
             )
 
     except Exception as e:
