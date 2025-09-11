@@ -7,6 +7,72 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import sys
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+import time
+import warnings
+import traceback
+import inspect
+
+warnings.filterwarnings("ignore")
+
+# Add src directory to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+try:
+    # Week 7-10: Model Framework Integration
+    from src.models import (
+        ModelFactory,
+        ModelEvaluator,
+        QuantRandomForestClassifier,
+        QuantRandomForestRegressor,
+        QuantXGBoostClassifier,
+        QuantXGBoostRegressor,
+    )
+    from src.models.traditional.svm_model import (
+        QuantSVMClassifier,
+        QuantSVMRegressor,
+    )
+    from src.models.deep_learning import (
+        QuantLSTMClassifier,
+        QuantLSTMRegressor,
+        QuantGRUClassifier,
+        QuantGRURegressor,
+    )
+    from src.models.advanced.ensemble import FinancialRandomForest
+    from src.models.advanced.transformer import (
+        TransformerClassifier,
+        TransformerRegressor,
+    )
+    from src.models.pipeline.training_pipeline import (
+        ModelTrainingPipeline,
+        ModelTrainingConfig,
+    )
+    from src.models.pipeline.model_registry import ModelRegistry
+    from src.config import settings
+
+    # Import custom components
+    from streamlit_app.components.model_widgets import (
+        ModelSelectionWidget,
+        HyperparameterWidget,
+        ModelComparisonWidget,
+        ProgressWidget,
+    )
+
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    st.error("Please ensure all required modules are properly installed.")
+    st.stop()
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
@@ -49,9 +115,19 @@ def main():
     if "model_cache" not in st.session_state:
         st.session_state.model_cache = {}
 
+    if "training_history" not in st.session_state:
+        st.session_state.training_history = []
+
+    if "model_registry" not in st.session_state:
+        st.session_state.model_registry = ModelRegistry()
+
     # Check for available features
     if "feature_cache" not in st.session_state or not st.session_state.feature_cache:
-        st.warning("🛠️ Please generate features first from Feature Engineering page")
+        st.warning(
+            "⚠️ No feature data available. Please visit the **Feature Engineering** page first."
+        )
+        if st.button("Go to Feature Engineering"):
+            st.switch_page("pages/02_feature_engineering.py")
         return
 
     # Professional UI Layout
@@ -71,555 +147,681 @@ def model_control_panel():
 
     # Feature selection
     available_features = list(st.session_state.feature_cache.keys())
-    selected_features = st.selectbox("Select Features", available_features)
 
-    if not selected_features:
+    if not available_features:
+        st.error("No features available for training.")
         return
 
-    # Model type selection
-    st.subheader("🤖 Model Types")
-
-    tab1, tab2, tab3 = st.tabs(["Traditional", "Deep Learning", "Advanced"])
-
-    with tab1:
-        traditional_models_config(selected_features)
-
-    with tab2:
-        deep_learning_models_config(selected_features)
-
-    with tab3:
-        advanced_models_config(selected_features)
-
-
-def traditional_models_config(feature_key: str):
-    """Traditional ML Models Configuration"""
-
-    st.markdown("**Traditional ML Models**")
-
-    # Model selection
-    model_type = st.selectbox(
-        "Model Type", ["Random Forest", "XGBoost", "SVM"], key="trad_model_type"
+    selected_feature_key = st.selectbox(
+        "Select Feature Set",
+        available_features,
+        help="Choose the feature set for model training",
     )
 
-    # Task type
-    task_type = st.radio(
-        "Task Type", ["Classification", "Regression"], key="trad_task_type"
+    # Display feature information
+    if selected_feature_key:
+        feature_data = st.session_state.feature_cache[selected_feature_key]
+
+        # Check if feature_data is a DataFrame or dict
+        if isinstance(feature_data, pd.DataFrame):
+            with st.expander("📊 Feature Set Information", expanded=False):
+                st.write(f"**Features Shape:** {feature_data.shape}")
+                st.write(f"**Columns:** {len(feature_data.columns)}")
+                st.write(
+                    f"**Date Range:** {feature_data.index.min()} to {feature_data.index.max()}"
+                )
+
+                # Show sample data
+                st.write("**Sample Data:**")
+                st.dataframe(feature_data.head(3), use_container_width=True)
+        elif isinstance(feature_data, dict):
+            with st.expander("📊 Feature Set Information", expanded=False):
+                st.write("**Feature Configuration:**")
+                for key, value in feature_data.items():
+                    if isinstance(value, list):
+                        st.write(
+                            f"**{key.replace('_', ' ').title()}:** {', '.join(value)}"
+                        )
+                    else:
+                        st.write(f"**{key.replace('_', ' ').title()}:** {value}")
+        else:
+            st.warning("⚠️ Unexpected feature data format. Please regenerate features.")
+            return
+
+    # Model selection widget
+    model_widget = ModelSelectionWidget()
+    model_config = model_widget.render_model_selection("training")
+
+    # Hyperparameter configuration
+    hyperparam_widget = HyperparameterWidget()
+    hyperparams = hyperparam_widget.render_hyperparameters(
+        model_config["model_class"], "training"
     )
 
-    # Hyperparameters
-    st.markdown("**Hyperparameters**")
+    # Training configuration
+    st.subheader("⚙️ Training Configuration")
 
-    if model_type == "Random Forest":
-        n_estimators = st.slider("N Estimators", 10, 200, 100, key="trad_n_est")
-        max_depth = st.slider("Max Depth", 3, 20, 10, key="trad_max_depth")
-        params = {
-            "n_estimators": n_estimators,
-            "max_depth": max_depth,
-            "random_state": 42,
-        }
-    elif model_type == "XGBoost":
-        n_estimators = st.slider("N Estimators", 10, 200, 100, key="trad_xgb_n_est")
-        learning_rate = st.slider("Learning Rate", 0.01, 0.3, 0.1, key="trad_lr")
-        params = {
-            "n_estimators": n_estimators,
-            "learning_rate": learning_rate,
-            "random_state": 42,
-        }
-    else:  # SVM
-        C = st.slider("C (Regularization)", 0.1, 10.0, 1.0, key="trad_C")
-        kernel = st.selectbox("Kernel", ["rbf", "linear", "poly"], key="trad_kernel")
-        params = {"C": C, "kernel": kernel, "random_state": 42}
+    col1, col2 = st.columns(2)
+    with col1:
+        test_size = st.slider("Test Size", 0.1, 0.4, 0.2, 0.05)
+        validation_size = st.slider("Validation Size", 0.1, 0.3, 0.2, 0.05)
 
-    # Train button
-    if st.button(
-        "🚀 Train Traditional Model", type="primary", use_container_width=True
-    ):
-        train_traditional_model(feature_key, model_type, task_type, params)
+    with col2:
+        cv_folds = st.slider("CV Folds", 3, 10, 5)
+        random_state = st.number_input("Random State", 0, 9999, 42)
 
+    # Advanced options
+    with st.expander("🔧 Advanced Options", expanded=False):
+        feature_selection = st.checkbox("Feature Selection", value=True)
+        hyperparameter_tuning = st.checkbox("Hyperparameter Tuning", value=False)
+        ensemble_training = st.checkbox("Ensemble Training", value=False)
 
-def deep_learning_models_config(feature_key: str):
-    """Deep Learning Models Configuration"""
+    # Training button
+    st.divider()
 
-    st.markdown("**Deep Learning Models**")
-
-    # Model selection
-    model_type = st.selectbox("Model Type", ["LSTM", "GRU"], key="dl_model_type")
-
-    # Task type
-    task_type = st.radio(
-        "Task Type", ["Classification", "Regression"], key="dl_task_type"
-    )
-
-    # Hyperparameters
-    st.markdown("**Hyperparameters**")
-
-    sequence_length = st.slider("Sequence Length", 10, 50, 20, key="dl_seq_len")
-    lstm_units = st.slider("LSTM/GRU Units", 16, 128, 64, key="dl_units")
-    dropout_rate = st.slider("Dropout Rate", 0.0, 0.5, 0.2, key="dl_dropout")
-    epochs = st.slider("Epochs", 5, 50, 20, key="dl_epochs")
-
-    params = {
-        "sequence_length": sequence_length,
-        "lstm_units": [lstm_units, lstm_units // 2] if model_type == "LSTM" else None,
-        "gru_units": [lstm_units, lstm_units // 2] if model_type == "GRU" else None,
-        "dense_units": [lstm_units // 4],
-        "dropout_rate": dropout_rate,
-        "epochs": epochs,
-        "batch_size": 32,
-        "verbose": 0,
-    }
-
-    # Train button
-    if st.button(
-        "🚀 Train Deep Learning Model", type="primary", use_container_width=True
-    ):
-        train_deep_learning_model(feature_key, model_type, task_type, params)
-
-
-def advanced_models_config(feature_key: str):
-    """Advanced Models Configuration"""
-
-    st.markdown("**Advanced Models (AFML)**")
-
-    # Model selection
-    model_type = st.selectbox(
-        "Model Type", ["Financial Random Forest", "Ensemble"], key="adv_model_type"
-    )
-
-    # Task type
-    task_type = st.radio(
-        "Task Type", ["Classification", "Regression"], key="adv_task_type"
-    )
-
-    # Hyperparameters
-    st.markdown("**Hyperparameters**")
-
-    n_estimators = st.slider("N Estimators", 10, 100, 50, key="adv_n_est")
-    max_samples = st.slider("Max Samples", 0.5, 1.0, 0.8, key="adv_max_samples")
-
-    params = {
-        "n_estimators": n_estimators,
-        "max_samples": max_samples,
-        "random_state": 42,
-    }
-
-    # Train button
-    if st.button("🚀 Train Advanced Model", type="primary", use_container_width=True):
-        train_advanced_model(feature_key, model_type, task_type, params)
+    if st.button("🚀 Start Training", type="primary", use_container_width=True):
+        if selected_feature_key and model_config:
+            train_model(
+                feature_key=selected_feature_key,
+                model_config=model_config,
+                hyperparams=hyperparams,
+                training_config={
+                    "test_size": test_size,
+                    "validation_size": validation_size,
+                    "cv_folds": cv_folds,
+                    "random_state": random_state,
+                    "feature_selection": feature_selection,
+                    "hyperparameter_tuning": hyperparameter_tuning,
+                    "ensemble_training": ensemble_training,
+                },
+            )
+        else:
+            st.error("Please select features and configure model first.")
 
 
 def model_display_panel():
-    """Model Display and Comparison Panel"""
+    """Model Training Display Panel"""
+
+    # Tab interface for different views
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "📈 Training Progress",
+            "📊 Model Comparison",
+            "🎯 Model Details",
+            "💾 Model Registry",
+        ]
+    )
+
+    with tab1:
+        display_training_progress()
+
+    with tab2:
+        display_model_comparison()
+
+    with tab3:
+        display_model_details()
+
+    with tab4:
+        display_model_registry()
+
+
+def display_training_progress():
+    """Display training progress and metrics"""
+
+    st.subheader("📈 Training Progress")
+
+    if "current_training" in st.session_state and st.session_state.current_training:
+        # Show active training
+        training_info = st.session_state.current_training
+
+        # Progress bar
+        progress_placeholder = st.empty()
+        metrics_placeholder = st.empty()
+
+        # Training metrics
+        if "metrics" in training_info:
+            with metrics_placeholder.container():
+                display_training_metrics(training_info["metrics"])
+
+    else:
+        st.info(
+            "No active training session. Start training a model to see progress here."
+        )
+
+        # Show training history if available
+        if st.session_state.training_history:
+            st.subheader("📜 Recent Training History")
+
+            history_df = pd.DataFrame(st.session_state.training_history)
+            st.dataframe(history_df, use_container_width=True)
+
+
+def display_model_comparison():
+    """Display model comparison interface"""
+
+    st.subheader("📊 Model Performance Comparison")
 
     if not st.session_state.model_cache:
-        st.info("🤖 Configure and train models to see results")
+        st.info("No trained models available for comparison.")
+        return
+
+    # Model comparison widget
+    comparison_widget = ModelComparisonWidget()
+
+    # Prepare comparison data
+    comparison_data = []
+    for model_id, model_info in st.session_state.model_cache.items():
+        if "evaluation" in model_info:
+            eval_data = model_info["evaluation"]
+            comparison_row = {
+                "Model": model_info.get("name", model_id),
+                "Task Type": model_info.get("task_type", "Unknown"),
+                "Status": model_info.get("status", "Unknown"),
+                "Training Time": model_info.get("training_time", 0),
+            }
+
+            # Add performance metrics
+            if (
+                hasattr(eval_data, "classification_metrics")
+                and eval_data.classification_metrics
+            ):
+                comparison_row.update(
+                    {
+                        "Accuracy": eval_data.classification_metrics.get("accuracy", 0),
+                        "Precision": eval_data.classification_metrics.get(
+                            "precision", 0
+                        ),
+                        "Recall": eval_data.classification_metrics.get("recall", 0),
+                        "F1 Score": eval_data.classification_metrics.get("f1_score", 0),
+                        "AUC": eval_data.classification_metrics.get("roc_auc", 0),
+                    }
+                )
+
+            if (
+                hasattr(eval_data, "regression_metrics")
+                and eval_data.regression_metrics
+            ):
+                comparison_row.update(
+                    {
+                        "MSE": eval_data.regression_metrics.get("mse", 0),
+                        "RMSE": eval_data.regression_metrics.get("rmse", 0),
+                        "R2 Score": eval_data.regression_metrics.get("r2_score", 0),
+                    }
+                )
+
+            comparison_data.append(comparison_row)
+
+    # Render comparison
+    if comparison_data:
+        comparison_df = comparison_widget.render_comparison_table(comparison_data)
+        comparison_widget.render_performance_charts(comparison_data)
+    else:
+        st.info("No evaluation data available for comparison.")
+
+
+def display_model_details():
+    """Display detailed model information"""
+
+    st.subheader("🎯 Model Details")
+
+    if not st.session_state.model_cache:
+        st.info("No trained models available.")
         return
 
     # Model selection
-    selected_model = st.selectbox(
-        "Select Model", list(st.session_state.model_cache.keys())
+    model_ids = list(st.session_state.model_cache.keys())
+    selected_model_id = st.selectbox(
+        "Select Model for Details", model_ids, key="model_details_selection"
     )
 
-    if selected_model:
-        display_model_overview(selected_model)
-        display_model_performance(selected_model)
+    if selected_model_id:
+        model_info = st.session_state.model_cache[selected_model_id]
+
+        # Basic information
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Model Type", model_info.get("model_type", "Unknown"))
+
+        with col2:
+            st.metric("Task Type", model_info.get("task_type", "Unknown"))
+
+        with col3:
+            st.metric("Status", model_info.get("status", "Unknown"))
+
+        # Hyperparameters
+        if "hyperparameters" in model_info:
+            with st.expander("⚙️ Hyperparameters", expanded=True):
+                st.json(model_info["hyperparameters"])
+
+        # Feature importance (if available)
+        if "model" in model_info:
+            model = model_info["model"]
+            if hasattr(model, "get_feature_importance"):
+                try:
+                    feature_importance = model.get_feature_importance()
+                    if feature_importance is not None:
+                        with st.expander("🎯 Feature Importance", expanded=True):
+                            fig = px.bar(
+                                x=feature_importance.values,
+                                y=feature_importance.index,
+                                orientation="h",
+                                title="Feature Importance",
+                            )
+                            fig.update_layout(height=400)
+                            st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Could not display feature importance: {e}")
+
+        # Evaluation metrics
+        if "evaluation" in model_info:
+            evaluation = model_info["evaluation"]
+            with st.expander("📊 Evaluation Metrics", expanded=True):
+
+                # Classification metrics
+                if (
+                    hasattr(evaluation, "classification_metrics")
+                    and evaluation.classification_metrics
+                ):
+                    st.write("**Classification Metrics:**")
+                    metrics_df = pd.DataFrame([evaluation.classification_metrics]).T
+                    metrics_df.columns = ["Value"]
+                    st.dataframe(metrics_df, use_container_width=True)
+
+                # Regression metrics
+                if (
+                    hasattr(evaluation, "regression_metrics")
+                    and evaluation.regression_metrics
+                ):
+                    st.write("**Regression Metrics:**")
+                    metrics_df = pd.DataFrame([evaluation.regression_metrics]).T
+                    metrics_df.columns = ["Value"]
+                    st.dataframe(metrics_df, use_container_width=True)
 
 
-def train_traditional_model(
-    feature_key: str, model_type: str, task_type: str, params: dict
-):
-    """Train traditional ML model using Week 7 modules"""
+def display_model_registry():
+    """Display model registry interface"""
 
-    try:
-        cached_features = st.session_state.feature_cache[feature_key]
-        data = cached_features["data"]
-        features = cached_features["features"]
-
-        with st.spinner(f"Training {model_type} {task_type} model..."):
-            # Prepare features
-            feature_df = pd.DataFrame()
-            for name, values in features.items():
-                if isinstance(values, pd.Series):
-                    feature_df[name] = values
-                elif isinstance(values, dict):
-                    for sub_name, sub_values in values.items():
-                        if isinstance(sub_values, pd.Series):
-                            feature_df[f"{name}_{sub_name}"] = sub_values
-
-            if feature_df.empty:
-                st.error("No suitable features found for training")
-                return
-
-            # Create target
-            if task_type == "Classification":
-                target = (data["Close"].pct_change() > 0).astype(int)
-            else:
-                target = data["Close"].pct_change()
-
-            # Align data
-            aligned_data = pd.concat(
-                [feature_df, target.rename("target")], axis=1
-            ).dropna()
-
-            if len(aligned_data) < 50:
-                st.error("Insufficient data for training")
-                return
-
-            X = aligned_data[feature_df.columns]
-            y = aligned_data["target"]
-
-            # Train-test split
-            split_idx = int(len(X) * 0.8)
-            X_train, X_test = X[:split_idx], X[split_idx:]
-            y_train, y_test = y[:split_idx], y[split_idx:]
-
-            # Select model using existing Week 7 modules
-            if model_type == "Random Forest":
-                if task_type == "Classification":
-                    model = QuantRandomForestClassifier(**params)
-                else:
-                    model = QuantRandomForestRegressor(**params)
-            elif model_type == "XGBoost":
-                if task_type == "Classification":
-                    model = QuantXGBoostClassifier(**params)
-                else:
-                    model = QuantXGBoostRegressor(**params)
-
-            # Train model
-            model.fit(X_train, y_train)
-
-            # Evaluate using existing Week 7 modules
-            evaluator = ModelEvaluator()
-            if task_type == "Classification":
-                performance = evaluator.evaluate_classifier(model, X_test, y_test)
-            else:
-                performance = evaluator.evaluate_regressor(model, X_test, y_test)
-
-            # Store results
-            model_key = f"{model_type}_{task_type}_{feature_key}"
-            st.session_state.model_cache[model_key] = {
-                "model": model,
-                "model_type": model_type,
-                "task_type": task_type,
-                "performance": performance,
-                "feature_names": list(X.columns),
-                "test_data": (X_test, y_test),
-                "trained_at": datetime.now(),
-                "category": "traditional",
-            }
-
-        st.success(f"✅ Trained {model_type} {task_type} model successfully")
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Traditional model training failed: {str(e)}")
-
-
-def train_deep_learning_model(
-    feature_key: str, model_type: str, task_type: str, params: dict
-):
-    """Train deep learning model using Week 8 modules"""
+    st.subheader("💾 Model Registry")
 
     try:
-        cached_features = st.session_state.feature_cache[feature_key]
-        data = cached_features["data"]
-        features = cached_features["features"]
+        registry = st.session_state.model_registry
 
-        with st.spinner(f"Training {model_type} {task_type} model..."):
-            # Prepare features
-            feature_df = pd.DataFrame()
-            for name, values in features.items():
-                if isinstance(values, pd.Series):
-                    feature_df[name] = values
+        # Get all models from registry
+        all_models = registry.list_models()
 
-            if feature_df.empty:
-                st.error("No suitable features found for training")
-                return
+        if not all_models:
+            st.info("No models in registry yet.")
+            return
 
-            # Create target
-            if task_type == "Classification":
-                target = (data["Close"].pct_change() > 0).astype(int)
-            else:
-                target = data["Close"].pct_change()
+        # Convert to DataFrame for display
+        registry_data = []
+        for model_metadata in all_models:
+            registry_data.append(
+                {
+                    "Model ID": model_metadata.model_id,
+                    "Name": model_metadata.model_name,
+                    "Type": model_metadata.model_type,
+                    "Task": model_metadata.task_type,
+                    "Version": model_metadata.version,
+                    "Stage": model_metadata.stage,
+                    "Created": model_metadata.created_at.strftime("%Y-%m-%d %H:%M"),
+                    "Performance": f"{model_metadata.performance_metrics.get('accuracy', model_metadata.performance_metrics.get('r2_score', 'N/A')):.3f}",
+                }
+            )
 
-            # Align data
-            aligned_data = pd.concat(
-                [feature_df, target.rename("target")], axis=1
-            ).dropna()
+        registry_df = pd.DataFrame(registry_data)
+        st.dataframe(registry_df, use_container_width=True)
 
-            if len(aligned_data) < 100:
-                st.error("Insufficient data for deep learning training")
-                return
+        # Model management actions
+        st.subheader("🔧 Model Management")
 
-            X = aligned_data[feature_df.columns].values
-            y = aligned_data["target"].values
+        col1, col2 = st.columns(2)
 
-            # Train-test split
-            split_idx = int(len(X) * 0.8)
-            X_train, X_test = X[:split_idx], X[split_idx:]
-            y_train, y_test = y[:split_idx], y[split_idx:]
-
-            # Select model using existing Week 8 modules
-            if model_type == "LSTM":
-                if task_type == "Classification":
-                    model = QuantLSTMClassifier(**params)
-                else:
-                    model = QuantLSTMRegressor(**params)
-            else:  # GRU
-                if task_type == "Classification":
-                    model = QuantGRUClassifier(**params)
-                else:
-                    model = QuantGRURegressor(**params)
-
-            # Train model
-            model.fit(X_train, y_train)
-
-            # Simple evaluation
-            predictions = model.predict(X_test)
-
-            if task_type == "Classification":
-                accuracy = np.mean(
-                    predictions == y_test[params["sequence_length"] - 1 :]
+        with col1:
+            if st.button("📥 Load Model from Registry"):
+                model_id = st.selectbox(
+                    "Select Model to Load", [m.model_id for m in all_models]
                 )
-                performance = {"accuracy": accuracy}
-            else:
-                y_test_aligned = y_test[params["sequence_length"] - 1 :]
-                mse = np.mean((predictions - y_test_aligned) ** 2)
-                mae = np.mean(np.abs(predictions - y_test_aligned))
-                performance = {"mse": mse, "mae": mae}
+                if model_id:
+                    try:
+                        loaded_model = registry.load_model(model_id)
+                        if loaded_model:
+                            st.success(f"Model {model_id} loaded successfully!")
+                        else:
+                            st.error("Failed to load model.")
+                    except Exception as e:
+                        st.error(f"Error loading model: {e}")
 
-            # Store results
-            model_key = f"{model_type}_{task_type}_{feature_key}"
-            st.session_state.model_cache[model_key] = {
-                "model": model,
-                "model_type": model_type,
-                "task_type": task_type,
-                "performance": performance,
-                "feature_names": list(feature_df.columns),
-                "test_data": (X_test, y_test),
-                "trained_at": datetime.now(),
-                "category": "deep_learning",
-            }
-
-        st.success(f"✅ Trained {model_type} {task_type} model successfully")
-        st.rerun()
+        with col2:
+            if st.button("🗑️ Archive Old Models"):
+                # Archive models older than 30 days
+                try:
+                    old_models = [
+                        m
+                        for m in all_models
+                        if (datetime.now() - m.created_at).days > 30
+                    ]
+                    for model in old_models:
+                        registry.set_model_stage(model.model_id, "archived")
+                    st.success(f"Archived {len(old_models)} old models.")
+                except Exception as e:
+                    st.error(f"Error archiving models: {e}")
 
     except Exception as e:
-        st.error(f"Deep learning model training failed: {str(e)}")
+        st.error(f"Error accessing model registry: {e}")
 
 
-def train_advanced_model(
-    feature_key: str, model_type: str, task_type: str, params: dict
+def train_model(
+    feature_key: str, model_config: Dict, hyperparams: Dict, training_config: Dict
 ):
-    """Train advanced model using Week 9 modules"""
+    """Train a model with the specified configuration"""
 
     try:
-        cached_features = st.session_state.feature_cache[feature_key]
-        data = cached_features["data"]
-        features = cached_features["features"]
+        # Get feature data
+        feature_data = st.session_state.feature_cache[feature_key]
 
-        with st.spinner(f"Training {model_type} {task_type} model..."):
-            # Prepare features
-            feature_df = pd.DataFrame()
-            for name, values in features.items():
-                if isinstance(values, pd.Series):
-                    feature_df[name] = values
+        # Handle different feature data types
+        if isinstance(feature_data, dict):
+            st.error(
+                "⚠️ Feature data is configuration only. Please generate actual features first."
+            )
+            return
+        elif not isinstance(feature_data, pd.DataFrame):
+            st.error("⚠️ Unexpected feature data format. Please regenerate features.")
+            return
 
-            if feature_df.empty:
-                st.error("No suitable features found for training")
+        # Start training process
+        st.session_state.current_training = {
+            "status": "initializing",
+            "start_time": datetime.now(),
+            "model_config": model_config,
+            "hyperparams": hyperparams,
+            "training_config": training_config,
+        }
+
+        # Create progress containers
+        progress_container = st.container()
+
+        with progress_container:
+            st.info("🚀 Starting model training...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Step 1: Data preparation
+            status_text.text("📊 Preparing data...")
+            progress_bar.progress(0.1)
+            time.sleep(0.5)
+
+            # Prepare features and target
+            if len(feature_data.columns) == 0:
+                st.error("No features available for training.")
                 return
 
-            # Create target
-            if task_type == "Classification":
-                target = (data["Close"].pct_change() > 0).astype(int)
-            else:
-                target = data["Close"].pct_change()
+            # Simple target creation (you may want to use existing target from features)
+            # For demonstration, create a simple return-based target
+            price_col = None
+            for col in feature_data.columns:
+                if "close" in col.lower() or "price" in col.lower():
+                    price_col = col
+                    break
 
-            # Align data
-            aligned_data = pd.concat(
-                [feature_df, target.rename("target")], axis=1
-            ).dropna()
+            if price_col is None:
+                # Use first column as proxy price
+                price_col = feature_data.columns[0]
 
-            if len(aligned_data) < 50:
-                st.error("Insufficient data for training")
+            # Create target variable (next period return)
+            target = feature_data[price_col].pct_change().shift(-1)
+
+            # For classification task, convert to binary signals
+            if model_config["task_type"] == "classification":
+                target = (target > 0).astype(int)
+
+            # Remove NaN values
+            valid_idx = ~(target.isna() | feature_data.isna().any(axis=1))
+            X = feature_data[valid_idx].values
+            y = target[valid_idx].values
+
+            if len(X) == 0:
+                st.error("No valid data available after cleaning.")
                 return
 
-            X = aligned_data[feature_df.columns]
-            y = aligned_data["target"]
+            # Step 2: Train-test split
+            status_text.text("📈 Splitting data...")
+            progress_bar.progress(0.2)
+            time.sleep(0.5)
 
-            # Train-test split
-            split_idx = int(len(X) * 0.8)
-            X_train, X_test = X[:split_idx], X[split_idx:]
-            y_train, y_test = y[:split_idx], y[split_idx:]
+            from sklearn.model_selection import train_test_split
 
-            # Use existing Week 9 modules
-            from src.models.advanced.ensemble import EnsembleConfig
+            X_train, X_test, y_train, y_test = train_test_split(
+                X,
+                y,
+                test_size=training_config["test_size"],
+                random_state=training_config["random_state"],
+                stratify=y if model_config["task_type"] == "classification" else None,
+            )
 
-            config = EnsembleConfig(**params)
-            model = FinancialRandomForest(config=config)
+            # Step 3: Initialize model
+            status_text.text("🤖 Initializing model...")
+            progress_bar.progress(0.3)
+            time.sleep(0.5)
 
-            # Train model
-            model.fit(X_train.values, y_train.values)
+            model = get_model_instance(
+                model_config["model_class"], model_config["task_type"], hyperparams
+            )
 
-            # Simple evaluation
-            predictions = model.predict(X_test.values)
+            if model is None:
+                st.error(f"Could not initialize model: {model_config['model_class']}")
+                return
 
-            if task_type == "Classification":
-                accuracy = np.mean(predictions == y_test.values)
-                performance = {"accuracy": accuracy}
-            else:
-                mse = np.mean((predictions - y_test.values) ** 2)
-                mae = np.mean(np.abs(predictions - y_test.values))
-                performance = {"mse": mse, "mae": mae}
+            # Step 4: Train model
+            status_text.text("🔥 Training model...")
+            progress_bar.progress(0.5)
 
-            # Store results
-            model_key = f"{model_type}_{task_type}_{feature_key}"
-            st.session_state.model_cache[model_key] = {
-                "model": model,
-                "model_type": model_type,
-                "task_type": task_type,
-                "performance": performance,
-                "feature_names": list(X.columns),
-                "test_data": (X_test, y_test),
-                "trained_at": datetime.now(),
-                "category": "advanced",
-            }
+            start_time = time.time()
 
-        st.success(f"✅ Trained {model_type} {task_type} model successfully")
-        st.rerun()
+            try:
+                model.fit(X_train, y_train)
+                training_time = time.time() - start_time
+
+                progress_bar.progress(0.8)
+                status_text.text("📊 Evaluating model...")
+                time.sleep(0.5)
+
+                # Step 5: Evaluate model
+                evaluator = ModelEvaluator(problem_type=model_config["task_type"])
+                evaluation = evaluator.evaluate_model(
+                    model, X_test, y_test, X_train, y_train
+                )
+
+                progress_bar.progress(1.0)
+                status_text.text("✅ Training completed!")
+
+                # Step 6: Store results
+                model_id = f"{model_config['model_type']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+                model_info = {
+                    "model_id": model_id,
+                    "name": f"{model_config['model_type']} ({model_config['task_type']})",
+                    "model": model,
+                    "model_type": model_config["model_type"],
+                    "model_class": model_config["model_class"],
+                    "task_type": model_config["task_type"],
+                    "hyperparameters": hyperparams,
+                    "training_config": training_config,
+                    "evaluation": evaluation,
+                    "training_time": training_time,
+                    "status": "completed",
+                    "created_at": datetime.now(),
+                    "feature_key": feature_key,
+                }
+
+                # Store in session state
+                st.session_state.model_cache[model_id] = model_info
+
+                # Add to training history
+                history_entry = {
+                    "Model": model_info["name"],
+                    "Task Type": model_config["task_type"],
+                    "Training Time": f"{training_time:.2f}s",
+                    "Status": "Completed",
+                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+
+                st.session_state.training_history.append(history_entry)
+
+                # Register model in registry
+                try:
+                    performance_metrics = {}
+                    if (
+                        hasattr(evaluation, "classification_metrics")
+                        and evaluation.classification_metrics
+                    ):
+                        performance_metrics.update(evaluation.classification_metrics)
+                    if (
+                        hasattr(evaluation, "regression_metrics")
+                        and evaluation.regression_metrics
+                    ):
+                        performance_metrics.update(evaluation.regression_metrics)
+
+                    st.session_state.model_registry.register_model(
+                        model=model,
+                        model_name=model_info["name"],
+                        model_type=model_config["model_class"],
+                        task_type=model_config["task_type"],
+                        performance_metrics=performance_metrics,
+                        feature_names=list(feature_data.columns),
+                        training_data_info={
+                            "n_samples": len(X),
+                            "n_features": X.shape[1],
+                            "train_size": len(X_train),
+                            "test_size": len(X_test),
+                        },
+                        hyperparameters=hyperparams,
+                        description=f"Model trained on {feature_key}",
+                    )
+                except Exception as e:
+                    st.warning(f"Could not register model in registry: {e}")
+
+                # Clear current training status
+                if "current_training" in st.session_state:
+                    del st.session_state.current_training
+
+                st.success(f"✅ Model trained successfully! Model ID: {model_id}")
+                st.balloons()
+
+                # Display quick results
+                with st.expander("📊 Quick Results", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric("Training Time", f"{training_time:.2f}s")
+
+                    with col2:
+                        if (
+                            hasattr(evaluation, "classification_metrics")
+                            and evaluation.classification_metrics
+                        ):
+                            accuracy = evaluation.classification_metrics.get(
+                                "accuracy", 0
+                            )
+                            st.metric("Accuracy", f"{accuracy:.3f}")
+                        elif (
+                            hasattr(evaluation, "regression_metrics")
+                            and evaluation.regression_metrics
+                        ):
+                            r2 = evaluation.regression_metrics.get("r2_score", 0)
+                            st.metric("R² Score", f"{r2:.3f}")
+
+                    with col3:
+                        st.metric("Data Points", len(X))
+
+            except Exception as e:
+                st.error(f"Error during model training: {e}")
+                st.error(traceback.format_exc())
 
     except Exception as e:
-        st.error(f"Advanced model training failed: {str(e)}")
+        st.error(f"Error in training process: {e}")
+        st.error(traceback.format_exc())
+
+    finally:
+        # Clean up current training status
+        if "current_training" in st.session_state:
+            del st.session_state.current_training
 
 
-def display_model_overview(model_key: str):
-    """Display model overview with metrics"""
+def get_model_instance(model_class: str, task_type: str, hyperparams: Dict):
+    """Get an instance of the specified model class"""
 
-    cached_model = st.session_state.model_cache[model_key]
-    model = cached_model["model"]
-    model_type = cached_model["model_type"]
-    task_type = cached_model["task_type"]
-    performance = cached_model["performance"]
-    category = cached_model["category"]
+    try:
+        # Model class mapping
+        model_classes = {
+            "QuantRandomForestClassifier": QuantRandomForestClassifier,
+            "QuantRandomForestRegressor": QuantRandomForestRegressor,
+            "QuantXGBoostClassifier": QuantXGBoostClassifier,
+            "QuantXGBoostRegressor": QuantXGBoostRegressor,
+            "QuantSVMClassifier": QuantSVMClassifier,
+            "QuantSVMRegressor": QuantSVMRegressor,
+            "QuantLSTMClassifier": QuantLSTMClassifier,
+            "QuantLSTMRegressor": QuantLSTMRegressor,
+            "QuantGRUClassifier": QuantGRUClassifier,
+            "QuantGRURegressor": QuantGRURegressor,
+        }
 
-    st.subheader(f"🤖 Model Overview: {model_key}")
+        # Get model class
+        if model_class not in model_classes:
+            st.error(f"Unknown model class: {model_class}")
+            return None
 
-    # Metrics
+        ModelClass = model_classes[model_class]
+
+        # Filter hyperparameters to only include valid ones for the model
+        try:
+            # Get model's init signature to filter parameters
+            import inspect
+
+            init_signature = inspect.signature(ModelClass.__init__)
+            valid_params = set(init_signature.parameters.keys()) - {"self"}
+
+            filtered_params = {
+                k: v for k, v in hyperparams.items() if k in valid_params
+            }
+
+            # Initialize model with filtered parameters
+            model = ModelClass(**filtered_params)
+            return model
+
+        except Exception as e:
+            st.warning(f"Could not filter hyperparameters: {e}. Using defaults.")
+            # Fallback: initialize with default parameters
+            model = ModelClass()
+            return model
+
+    except Exception as e:
+        st.error(f"Error creating model instance: {e}")
+        return None
+
+
+def display_training_metrics(metrics: Dict[str, float]):
+    """Display training metrics in real-time"""
+
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Model Type", model_type)
+        if "loss" in metrics:
+            st.metric("Loss", f"{metrics['loss']:.4f}")
 
     with col2:
-        st.metric("Task", task_type)
+        if "accuracy" in metrics:
+            st.metric("Accuracy", f"{metrics['accuracy']:.4f}")
 
     with col3:
-        st.metric("Category", category.title())
+        if "val_loss" in metrics:
+            st.metric("Val Loss", f"{metrics['val_loss']:.4f}")
 
     with col4:
-        trained_time = cached_model["trained_at"]
-        st.metric("Trained", trained_time.strftime("%H:%M"))
-
-    # Performance metrics
-    st.subheader("📊 Performance Metrics")
-
-    perf_cols = st.columns(len(performance))
-    for i, (metric, value) in enumerate(performance.items()):
-        with perf_cols[i]:
-            st.metric(metric.upper(), f"{value:.4f}")
-
-    # Feature importance (if available)
-    if hasattr(model, "feature_importances_"):
-        st.subheader("🎯 Feature Importance")
-
-        feature_names = cached_model["feature_names"]
-        importances = model.feature_importances_
-
-        importance_df = pd.DataFrame(
-            {"Feature": feature_names, "Importance": importances}
-        ).sort_values("Importance", ascending=False)
-
-        st.dataframe(importance_df.head(10), use_container_width=True)
-
-
-def display_model_performance(model_key: str):
-    """Display model performance visualization"""
-
-    cached_model = st.session_state.model_cache[model_key]
-    model = cached_model["model"]
-    task_type = cached_model["task_type"]
-    X_test, y_test = cached_model["test_data"]
-
-    st.subheader("📈 Model Performance")
-
-    try:
-        # Get predictions
-        if cached_model["category"] == "deep_learning":
-            predictions = model.predict(X_test)
-            if task_type == "Classification":
-                y_test_aligned = y_test[model.sequence_length - 1 :]
-            else:
-                y_test_aligned = y_test[model.sequence_length - 1 :]
-        else:
-            predictions = model.predict(X_test)
-            y_test_aligned = y_test.values if hasattr(y_test, "values") else y_test
-
-        # Create visualization
-        fig = go.Figure()
-
-        if task_type == "Classification":
-            # Classification: Confusion Matrix visualization
-            from sklearn.metrics import confusion_matrix
-
-            cm = confusion_matrix(y_test_aligned, predictions)
-
-            fig.add_trace(
-                go.Heatmap(
-                    z=cm,
-                    x=["Predicted 0", "Predicted 1"],
-                    y=["Actual 0", "Actual 1"],
-                    colorscale="Blues",
-                    text=cm,
-                    texttemplate="%{text}",
-                    textfont={"size": 20},
-                )
-            )
-
-            fig.update_layout(title="Confusion Matrix", height=400)
-
-        else:
-            # Regression: Actual vs Predicted
-            fig.add_trace(
-                go.Scatter(
-                    x=list(range(len(predictions))),
-                    y=y_test_aligned,
-                    mode="lines",
-                    name="Actual",
-                    line=dict(color="blue"),
-                )
-            )
-
-            fig.add_trace(
-                go.Scatter(
-                    x=list(range(len(predictions))),
-                    y=predictions,
-                    mode="lines",
-                    name="Predicted",
-                    line=dict(color="red"),
-                )
-            )
-
-            fig.update_layout(
-                title="Actual vs Predicted Values",
-                xaxis_title="Time",
-                yaxis_title="Value",
-                height=400,
-            )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"Visualization error: {str(e)}")
+        if "val_accuracy" in metrics:
+            st.metric("Val Accuracy", f"{metrics['val_accuracy']:.4f}")
 
 
 if __name__ == "__main__":
