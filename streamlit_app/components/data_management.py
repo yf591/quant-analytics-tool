@@ -304,15 +304,23 @@ def display_storage_management() -> None:
         col_action1, col_action2, col_action3 = st.columns(3)
 
         with col_action1:
-            if st.button("💾 Save All Data", use_container_width=True):
+            if st.button(
+                "💾 Save All Data", use_container_width=True, key="storage_save_all_btn"
+            ):
                 st.info("Saving all collected data...")
 
         with col_action2:
-            if st.button("📂 Load Existing Data", use_container_width=True):
+            if st.button(
+                "📂 Load Existing Data",
+                use_container_width=True,
+                key="storage_load_btn",
+            ):
                 st.info("Loading existing data...")
 
         with col_action3:
-            if st.button("🗑️ Clear Cache", use_container_width=True):
+            if st.button(
+                "🗑️ Clear Cache", use_container_width=True, key="storage_clear_cache_btn"
+            ):
                 st.session_state.data_cache = {}
                 st.success("Cache cleared!")
                 st.rerun()
@@ -597,14 +605,21 @@ def create_batch_operation_interface() -> Dict[str, Any]:
 
         with col_op1:
             collect_batch = st.button(
-                "📥 Collect Batch", type="primary", use_container_width=True
+                "📥 Collect Batch",
+                type="primary",
+                use_container_width=True,
+                key="batch_collect_btn",
             )
 
         with col_op2:
-            validate_batch = st.button("🔍 Validate All", use_container_width=True)
+            validate_batch = st.button(
+                "🔍 Validate All", use_container_width=True, key="batch_validate_btn"
+            )
 
         with col_op3:
-            save_batch = st.button("💾 Save All", use_container_width=True)
+            save_batch = st.button(
+                "💾 Save All", use_container_width=True, key="batch_save_btn"
+            )
 
         return {
             "symbol_list": symbol_list,

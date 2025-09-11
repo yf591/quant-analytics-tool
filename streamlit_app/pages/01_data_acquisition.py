@@ -111,14 +111,14 @@ def data_collection_workflow():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📥 Start Collection", type="primary", use_container_width=True):
+        if st.button("📥 Start Collection", type="primary", use_container_width=True, key="start_collection_btn"):
             if source_config["data_source"] == "Yahoo Finance":
                 start_yahoo_finance_collection(source_config)
             elif source_config["data_source"] == "Custom Upload":
                 start_custom_upload_collection(source_config)
     
     with col2:
-        if st.button("⏹️ Stop Collection", use_container_width=True):
+        if st.button("⏹️ Stop Collection", use_container_width=True, key="stop_collection_btn"):
             st.session_state.collection_status = {}
             st.success("Collection stopped")
     
@@ -210,11 +210,11 @@ def data_validation_workflow():
     col_val1, col_val2 = st.columns(2)
     
     with col_val1:
-        if st.button("🔍 Validate Selected", type="primary", use_container_width=True):
+        if st.button("🔍 Validate Selected", type="primary", use_container_width=True, key="validate_selected_btn"):
             validate_selected_data(selected_symbols, validation_level, generate_report)
     
     with col_val2:
-        if st.button("🔍 Validate All", use_container_width=True):
+        if st.button("🔍 Validate All", use_container_width=True, key="validate_all_btn"):
             validate_all_data(validation_level, generate_report)
     
     # Display validation results

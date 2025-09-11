@@ -203,9 +203,11 @@ def feature_analysis_workflow(ticker: str):
 
     st.subheader("📊 Feature Analysis & Visualization")
 
-    # Check for available feature sets
+    # Check for available feature sets (exclude metadata)
     available_features = [
-        key for key in st.session_state.feature_cache.keys() if ticker in key
+        key
+        for key in st.session_state.feature_cache.keys()
+        if ticker in key and not key.endswith("_metadata")
     ]
     available_pipelines = [
         key for key in st.session_state.feature_pipeline_cache.keys() if ticker in key
@@ -351,9 +353,26 @@ def calculate_technical_indicators(
 
         # Store results with additional metadata
         feature_key = f"{ticker}_technical"
-        st.session_state.feature_cache[feature_key] = {
-            "data": normalized_data,  # Store normalized data
-            "features": results,
+
+        # Convert features dict to DataFrame for Model Training compatibility
+        feature_df = pd.DataFrame(index=normalized_data.index)
+        for name, values in results.items():
+            if isinstance(values, pd.Series):
+                feature_df[name] = values
+            else:
+                # Convert other types to Series if possible
+                try:
+                    feature_df[name] = pd.Series(values, index=normalized_data.index)
+                except:
+                    st.warning(f"Could not convert {name} to Series, skipping")
+
+        # Store DataFrame instead of dict for Model Training compatibility
+        st.session_state.feature_cache[feature_key] = feature_df
+
+        # Also store metadata separately if needed
+        st.session_state.feature_cache[f"{feature_key}_metadata"] = {
+            "original_data": normalized_data,
+            "features_dict": results,
             "type": "technical",
             "config": config,
             "calculated_at": datetime.now(),
@@ -479,9 +498,26 @@ def calculate_advanced_features(
 
         # Store results with additional metadata
         feature_key = f"{ticker}_advanced"
-        st.session_state.feature_cache[feature_key] = {
-            "data": clean_data,
-            "features": results,
+
+        # Convert features dict to DataFrame for Model Training compatibility
+        feature_df = pd.DataFrame(index=clean_data.index)
+        for name, values in results.items():
+            if isinstance(values, pd.Series):
+                feature_df[name] = values
+            else:
+                # Convert other types to Series if possible
+                try:
+                    feature_df[name] = pd.Series(values, index=clean_data.index)
+                except:
+                    st.warning(f"Could not convert {name} to Series, skipping")
+
+        # Store DataFrame instead of dict for Model Training compatibility
+        st.session_state.feature_cache[feature_key] = feature_df
+
+        # Also store metadata separately if needed
+        st.session_state.feature_cache[f"{feature_key}_metadata"] = {
+            "original_data": clean_data,
+            "features_dict": results,
             "type": "advanced",
             "config": config,
             "calculated_at": datetime.now(),
@@ -670,6 +706,20 @@ def run_feature_pipeline(ticker: str, data: pd.DataFrame, config: Dict[str, Any]
 
         # Store pipeline results
         pipeline_key = f"{ticker}_pipeline"
+
+        # Store the features DataFrame directly in feature_cache for Model Training compatibility
+        st.session_state.feature_cache[pipeline_key] = all_features
+
+        # Store metadata separately
+        st.session_state.feature_cache[f"{pipeline_key}_metadata"] = {
+            "original_data": normalized_data,
+            "type": "pipeline",
+            "config": config,
+            "calculated_at": datetime.now(),
+            "feature_metadata": feature_metadata,
+        }
+
+        # Also store in feature_pipeline_cache for pipeline-specific functionality
         st.session_state.feature_pipeline_cache[pipeline_key] = {
             "data": normalized_data,
             "results": pipeline_results,
@@ -692,40 +742,141 @@ def run_feature_pipeline(ticker: str, data: pd.DataFrame, config: Dict[str, Any]
 def display_technical_results(feature_key: str):
     """Display technical indicators results"""
 
-    cached_features = st.session_state.feature_cache[feature_key]
-    features = cached_features["features"]
-    data = cached_features["data"]
+    # Check if we have the new DataFrame format or old dict format
+    if feature_key in st.session_state.feature_cache:
+        cached_data = st.session_state.feature_cache[feature_key]
 
-    # Display feature table
-    display_feature_table(features, title="📊 Technical Indicators", show_stats=True)
+        if isinstance(cached_data, pd.DataFrame):
+            # New format: Direct DataFrame
+            feature_df = cached_data
+            metadata_key = f"{feature_key}_metadata"
 
-    # Create and display chart
-    if features:
-        chart = create_technical_indicators_chart(
-            data=data,
-            indicators=features,
-            height=600,
-            title="Technical Indicators Analysis",
+            if metadata_key in st.session_state.feature_cache:
+                metadata = st.session_state.feature_cache[metadata_key]
+                original_data = metadata["original_data"]
+                features_dict = metadata["features_dict"]
+            else:
+                original_data = feature_df  # Fallback
+                features_dict = {col: feature_df[col] for col in feature_df.columns}
+        else:
+            # Old format: Dict with data and features
+            cached_features = cached_data
+            features_dict = cached_features["features"]
+            original_data = cached_features["data"]
+
+            # Convert to DataFrame for consistent handling
+            feature_df = pd.DataFrame(index=original_data.index)
+            for name, values in features_dict.items():
+                if isinstance(values, pd.Series):
+                    feature_df[name] = values
+
+        # Debug information
+        with st.expander("🔍 Debug Information", expanded=False):
+            st.write(f"**Number of calculated indicators:** {len(feature_df.columns)}")
+            st.write(f"**Indicator names:** {list(feature_df.columns)}")
+            for col in feature_df.columns:
+                valid_count = feature_df[col].dropna().shape[0]
+                st.write(
+                    f"**{col}:** {valid_count} valid values out of {len(feature_df)}"
+                )
+
+        # Display feature table - pass DataFrame directly
+        display_feature_table(
+            feature_df, title="📊 Technical Indicators", show_stats=True
         )
-        st.plotly_chart(chart, use_container_width=True)
+
+        # Create and display chart
+        if len(feature_df.columns) > 0:
+            try:
+                chart = create_technical_indicators_chart(
+                    data=original_data,
+                    indicators=features_dict,
+                    height=600,
+                    title="Technical Indicators Analysis",
+                )
+                st.plotly_chart(chart, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating chart: {e}")
+
+                # Fallback: Show simple line charts
+                st.subheader("📈 Individual Indicator Charts")
+                for col in feature_df.columns:
+                    values = feature_df[col].dropna()
+                    if not values.empty:
+                        fig = go.Figure()
+                        fig.add_trace(
+                            go.Scatter(x=values.index, y=values, mode="lines", name=col)
+                        )
+                        fig.update_layout(title=f"{col} Indicator", height=300)
+                        st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No indicators to display")
+    else:
+        st.error(f"Feature key {feature_key} not found in cache")
 
 
 def display_advanced_results(feature_key: str):
     """Display advanced features results"""
 
-    cached_features = st.session_state.feature_cache[feature_key]
-    features = cached_features["features"]
-    data = cached_features["data"]
+    # Check if we have the new DataFrame format or old dict format
+    if feature_key in st.session_state.feature_cache:
+        cached_data = st.session_state.feature_cache[feature_key]
 
-    # Display feature table
-    display_feature_table(features, title="🧠 Advanced Features", show_stats=True)
+        if isinstance(cached_data, pd.DataFrame):
+            # New format: Direct DataFrame
+            feature_df = cached_data
+            metadata_key = f"{feature_key}_metadata"
 
-    # Create and display chart
-    if features:
-        chart = create_advanced_features_chart(
-            data=data, features=features, height=600, title="Advanced Features Analysis"
-        )
-        st.plotly_chart(chart, use_container_width=True)
+            if metadata_key in st.session_state.feature_cache:
+                metadata = st.session_state.feature_cache[metadata_key]
+                original_data = metadata["original_data"]
+                features_dict = metadata["features_dict"]
+            else:
+                original_data = feature_df  # Fallback
+                features_dict = {col: feature_df[col] for col in feature_df.columns}
+        else:
+            # Old format: Dict with data and features
+            cached_features = cached_data
+            features_dict = cached_features["features"]
+            original_data = cached_features["data"]
+
+            # Convert to DataFrame for consistent handling
+            feature_df = pd.DataFrame(index=original_data.index)
+            for name, values in features_dict.items():
+                if isinstance(values, pd.Series):
+                    feature_df[name] = values
+
+        # Display feature table - pass DataFrame directly
+        display_feature_table(feature_df, title="🧠 Advanced Features", show_stats=True)
+
+        # Create and display chart
+        if len(feature_df.columns) > 0:
+            try:
+                chart = create_advanced_features_chart(
+                    data=original_data,
+                    features=features_dict,
+                    height=600,
+                    title="Advanced Features Analysis",
+                )
+                st.plotly_chart(chart, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating chart: {e}")
+
+                # Fallback: Show simple line charts
+                st.subheader("📈 Individual Feature Charts")
+                for col in feature_df.columns:
+                    values = feature_df[col].dropna()
+                    if not values.empty:
+                        fig = go.Figure()
+                        fig.add_trace(
+                            go.Scatter(x=values.index, y=values, mode="lines", name=col)
+                        )
+                        fig.update_layout(title=f"{col} Feature", height=300)
+                        st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No advanced features to display")
+    else:
+        st.error(f"Feature key {feature_key} not found in cache")
 
 
 def display_pipeline_results(pipeline_key: str):
@@ -743,9 +894,27 @@ def display_pipeline_results(pipeline_key: str):
         # Feature quality metrics
         if results.quality_metrics:
             st.subheader("📊 Feature Quality Metrics")
-            quality_df = pd.DataFrame([results.quality_metrics]).T
-            quality_df.columns = ["Score"]
-            st.dataframe(quality_df, use_container_width=True)
+
+            # Safely display quality metrics, excluding complex objects
+            display_metrics = {}
+            for key, value in results.quality_metrics.items():
+                if isinstance(value, (int, float, str, bool)):
+                    display_metrics[key] = value
+                elif isinstance(value, dict):
+                    # Display dict contents as string representation
+                    display_metrics[f"{key}_info"] = str(value)
+                else:
+                    display_metrics[f"{key}_type"] = str(type(value).__name__)
+
+            if display_metrics:
+                quality_df = pd.DataFrame([display_metrics]).T
+                quality_df.columns = ["Value"]
+                st.dataframe(quality_df, use_container_width=True)
+            else:
+                st.write(
+                    "Quality metrics available but cannot be displayed in table format"
+                )
+                st.json(results.quality_metrics)
 
         # Feature importance if available
         if (
@@ -758,7 +927,7 @@ def display_pipeline_results(pipeline_key: str):
             st.plotly_chart(chart, use_container_width=True)
         else:
             st.info(
-                "📊 Feature importance analysis not available for this pipeline run"
+                "Feature importance analysis requires target variable. This will be available when training models."
             )
 
 
@@ -766,33 +935,78 @@ def display_feature_visualization(feature_set_key: str):
     """Display feature visualization"""
 
     if feature_set_key in st.session_state.feature_cache:
-        cached_features = st.session_state.feature_cache[feature_set_key]
-        features = cached_features["features"]
-        data = cached_features["data"]
-        feature_type = cached_features["type"]
+        cached_data = st.session_state.feature_cache[feature_set_key]
+
+        # Check if we have the new DataFrame format or old dict format
+        if isinstance(cached_data, pd.DataFrame):
+            # New format: Direct DataFrame
+            feature_df = cached_data
+            metadata_key = f"{feature_set_key}_metadata"
+
+            if metadata_key in st.session_state.feature_cache:
+                metadata = st.session_state.feature_cache[metadata_key]
+                original_data = metadata["original_data"]
+                features_dict = metadata["features_dict"]
+                feature_type = metadata["type"]
+            else:
+                # Fallback if no metadata
+                original_data = feature_df
+                features_dict = {col: feature_df[col] for col in feature_df.columns}
+                feature_type = "unknown"
+        else:
+            # Old format: Dict with data and features
+            cached_features = cached_data
+
+            # Check if this is actually old format with 'features' key
+            if isinstance(cached_features, dict) and "features" in cached_features:
+                features_dict = cached_features["features"]
+                original_data = cached_features["data"]
+                feature_type = cached_features["type"]
+            else:
+                # This might be a metadata dict that shouldn't be here
+                st.error(
+                    f"❌ Invalid feature data format for {feature_set_key}. Please regenerate features."
+                )
+                st.write("Debug info - cached_data type:", type(cached_data))
+                if isinstance(cached_data, dict):
+                    st.write("Available keys:", list(cached_data.keys()))
+                return
 
         # Ensure data is a DataFrame
-        if not isinstance(data, pd.DataFrame):
+        if not isinstance(original_data, pd.DataFrame):
             st.error("❌ Data format error: Expected DataFrame for visualization")
             return
 
-        # Ensure features is in the correct format for charts
-        if feature_type == "technical":
-            chart = create_technical_indicators_chart(
-                data=data,
-                indicators=features,
-                height=700,
-                title="Technical Indicators Analysis",
-            )
-        else:
-            chart = create_advanced_features_chart(
-                data=data,
-                features=features,
-                height=700,
-                title="Advanced Features Analysis",
-            )
+        # Create chart based on feature type
+        try:
+            if feature_type == "technical":
+                chart = create_technical_indicators_chart(
+                    data=original_data,
+                    indicators=features_dict,
+                    height=700,
+                    title="Technical Indicators Analysis",
+                )
+            else:
+                chart = create_advanced_features_chart(
+                    data=original_data,
+                    features=features_dict,
+                    height=700,
+                    title="Advanced Features Analysis",
+                )
+            st.plotly_chart(chart, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating chart: {e}")
 
-        st.plotly_chart(chart, use_container_width=True)
+            # Fallback: Show simple visualization
+            st.subheader("📈 Feature Visualization (Fallback)")
+            if isinstance(cached_data, pd.DataFrame):
+                # Show correlation heatmap for DataFrame
+                if len(cached_data.columns) > 1:
+                    corr_matrix = cached_data.corr()
+                    chart = create_correlation_heatmap(
+                        corr_matrix, title="Feature Correlation Matrix"
+                    )
+                    st.plotly_chart(chart, use_container_width=True)
 
     elif feature_set_key in st.session_state.feature_pipeline_cache:
         cached_pipeline = st.session_state.feature_pipeline_cache[feature_set_key]
@@ -808,23 +1022,41 @@ def display_feature_visualization(feature_set_key: str):
                 st.plotly_chart(chart, use_container_width=True)
             else:
                 st.info("📊 Need at least 2 features to display correlation matrix")
+    else:
+        st.error(f"Feature set {feature_set_key} not found in cache")
 
 
 def display_feature_statistics(feature_set_key: str):
     """Display feature statistics"""
 
     if feature_set_key in st.session_state.feature_cache:
-        cached_features = st.session_state.feature_cache[feature_set_key]
-        features = cached_features["features"]
+        cached_data = st.session_state.feature_cache[feature_set_key]
 
-        # Convert dict to DataFrame for statistics
-        if isinstance(features, dict):
-            feature_df = pd.DataFrame()
-            for name, values in features.items():
-                if isinstance(values, pd.Series):
-                    feature_df[name] = values
+        # Check if we have the new DataFrame format or old dict format
+        if isinstance(cached_data, pd.DataFrame):
+            # New format: Direct DataFrame
+            feature_df = cached_data
         else:
-            feature_df = features
+            # Old format: Dict with data and features
+            cached_features = cached_data
+
+            # Check if this is actually old format with 'features' key
+            if isinstance(cached_features, dict) and "features" in cached_features:
+                features = cached_features["features"]
+
+                # Convert dict to DataFrame for statistics
+                if isinstance(features, dict):
+                    feature_df = pd.DataFrame()
+                    for name, values in features.items():
+                        if isinstance(values, pd.Series):
+                            feature_df[name] = values
+                else:
+                    feature_df = features
+            else:
+                st.error(
+                    f"❌ Invalid feature data format for {feature_set_key}. Please regenerate features."
+                )
+                return
 
         if not feature_df.empty:
             st.subheader("📊 Statistical Summary")
@@ -850,6 +1082,8 @@ def display_feature_statistics(feature_set_key: str):
                     }
                 )
                 st.dataframe(missing_df, use_container_width=True)
+        else:
+            st.warning("No feature data available for statistics")
 
     elif feature_set_key in st.session_state.feature_pipeline_cache:
         cached_pipeline = st.session_state.feature_pipeline_cache[feature_set_key]
@@ -858,28 +1092,56 @@ def display_feature_statistics(feature_set_key: str):
         if results.features is not None:
             st.subheader("📊 Pipeline Statistics")
             st.dataframe(results.features.describe(), use_container_width=True)
+    else:
+        st.error(f"Feature set {feature_set_key} not found in cache")
 
 
 def display_feature_quality_analysis(feature_set_key: str):
     """Display feature quality analysis"""
 
     if feature_set_key in st.session_state.feature_cache:
-        cached_features = st.session_state.feature_cache[feature_set_key]
-        features = cached_features["features"]
+        cached_data = st.session_state.feature_cache[feature_set_key]
 
-        # Convert dict to DataFrame for quality analysis
-        if isinstance(features, dict):
-            feature_df = pd.DataFrame()
-            for name, values in features.items():
-                if isinstance(values, pd.Series):
-                    feature_df[name] = values
+        # Check if we have the new DataFrame format or old dict format
+        if isinstance(cached_data, pd.DataFrame):
+            # New format: Direct DataFrame
+            feature_df = cached_data
         else:
-            feature_df = features
+            # Old format: Dict with data and features
+            try:
+                cached_features = cached_data
+                if "features" not in cached_features:
+                    st.error(
+                        f"Invalid data format for {feature_set_key}: missing 'features' key"
+                    )
+                    st.debug(
+                        f"Available keys: {list(cached_features.keys()) if hasattr(cached_features, 'keys') else 'Not a dict'}"
+                    )
+                    return
+
+                features = cached_features["features"]
+
+                # Convert dict to DataFrame for quality analysis
+                if isinstance(features, dict):
+                    feature_df = pd.DataFrame()
+                    for name, values in features.items():
+                        if isinstance(values, pd.Series):
+                            feature_df[name] = values
+                else:
+                    feature_df = features
+            except Exception as e:
+                st.error(
+                    f"Error processing feature data for {feature_set_key}: {str(e)}"
+                )
+                st.debug(f"Data type: {type(cached_data)}")
+                return
 
         if not feature_df.empty:
             display_feature_quality_metrics(
                 feature_df, title="🔍 Feature Quality Analysis"
             )
+        else:
+            st.warning("No feature data available for quality analysis")
 
     elif feature_set_key in st.session_state.feature_pipeline_cache:
         cached_pipeline = st.session_state.feature_pipeline_cache[feature_set_key]
@@ -898,121 +1160,8 @@ def display_feature_quality_analysis(feature_set_key: str):
                         st.metric(
                             metric_name.replace("_", " ").title(), f"{metric_value:.4f}"
                         )
-
-
-def display_feature_overview(feature_key: str):
-    """Display feature overview with metrics (legacy compatibility)"""
-
-    cached_features = st.session_state.feature_cache[feature_key]
-    features = cached_features["features"]
-    feature_type = cached_features["type"]
-
-    st.subheader(f"📊 Features Overview: {feature_key}")
-
-    # Metrics
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("Features", len(features))
-
-    with col2:
-        st.metric("Type", feature_type.title())
-
-    with col3:
-        data_points = len(cached_features["data"])
-        st.metric("Data Points", data_points)
-
-    with col4:
-        calc_time = cached_features["calculated_at"]
-        st.metric("Calculated", calc_time.strftime("%H:%M"))
-
-    # Feature preview
-    feature_df = pd.DataFrame()
-    for name, values in features.items():
-        if isinstance(values, pd.Series):
-            feature_df[name] = values
-        elif isinstance(values, dict):
-            for sub_name, sub_values in values.items():
-                if isinstance(sub_values, pd.Series):
-                    feature_df[f"{name}_{sub_name}"] = sub_values
-
-    if not feature_df.empty:
-        st.dataframe(feature_df.tail(10), use_container_width=True, height=300)
-
-        # Download option
-        csv = feature_df.to_csv()
-        st.download_button(
-            label="📥 Download Features CSV",
-            data=csv,
-            file_name=f"{feature_key}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-        )
-
-
-def display_feature_chart(feature_key: str):
-    """Display interactive feature chart (legacy compatibility)"""
-
-    cached_features = st.session_state.feature_cache[feature_key]
-    data = cached_features["data"]
-    features = cached_features["features"]
-
-    # Use correct column name
-    price_col = "Close" if "Close" in data.columns else "close"
-    if price_col not in data.columns:
-        st.warning("No price column found for chart display")
-        return
-
-    st.subheader("📈 Feature Visualization")
-
-    # Create subplots for different feature types
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        subplot_titles=("Price with Indicators", "Technical Features"),
-        row_heights=[0.7, 0.3],
-    )
-
-    # Price chart
-    fig.add_trace(
-        go.Scatter(
-            x=data.index,
-            y=data[price_col],
-            mode="lines",
-            name="Price",
-            line=dict(color="blue"),
-        ),
-        row=1,
-        col=1,
-    )
-
-    # Add technical indicators to price chart
-    for name, values in features.items():
-        if isinstance(values, pd.Series) and name in ["SMA", "EMA"]:
-            fig.add_trace(
-                go.Scatter(
-                    x=data.index, y=values, mode="lines", name=name, opacity=0.8
-                ),
-                row=1,
-                col=1,
-            )
-
-    # Add other features to second subplot
-    for name, values in features.items():
-        if isinstance(values, pd.Series) and name not in ["SMA", "EMA"]:
-            fig.add_trace(
-                go.Scatter(
-                    x=data.index, y=values, mode="lines", name=name, opacity=0.8
-                ),
-                row=2,
-                col=1,
-            )
-
-    fig.update_layout(
-        title=f"Feature Analysis: {feature_key}", height=600, template="plotly_white"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.error(f"Feature set {feature_set_key} not found in cache")
 
 
 if __name__ == "__main__":

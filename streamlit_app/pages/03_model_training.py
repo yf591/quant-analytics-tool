@@ -174,16 +174,39 @@ def model_control_panel():
                 # Show sample data
                 st.write("**Sample Data:**")
                 st.dataframe(feature_data.head(3), use_container_width=True)
+
+                # Show feature names
+                st.write("**Available Features:**")
+                st.write(", ".join(feature_data.columns.tolist()))
         elif isinstance(feature_data, dict):
-            with st.expander("📊 Feature Set Information", expanded=False):
-                st.write("**Feature Configuration:**")
-                for key, value in feature_data.items():
-                    if isinstance(value, list):
+            # Check if it's old format with 'features' key or config dict
+            if "features" in feature_data or "data" in feature_data:
+                # Old format - show some info but indicate need to regenerate
+                with st.expander("📊 Feature Set Information", expanded=False):
+                    if "features" in feature_data:
                         st.write(
-                            f"**{key.replace('_', ' ').title()}:** {', '.join(value)}"
+                            f"**Number of Features:** {len(feature_data['features'])}"
                         )
-                    else:
-                        st.write(f"**{key.replace('_', ' ').title()}:** {value}")
+                        st.write(
+                            f"**Feature Names:** {list(feature_data['features'].keys())}"
+                        )
+                    st.warning(
+                        "⚠️ Old feature format detected. Consider regenerating for better performance."
+                    )
+            else:
+                # Configuration dict
+                with st.expander("📊 Feature Set Information", expanded=False):
+                    st.write("**Feature Configuration:**")
+                    for key, value in feature_data.items():
+                        if isinstance(value, list):
+                            st.write(
+                                f"**{key.replace('_', ' ').title()}:** {', '.join(value)}"
+                            )
+                        else:
+                            st.write(f"**{key.replace('_', ' ').title()}:** {value}")
+                    st.warning(
+                        "⚠️ This is configuration data. Please generate actual features first."
+                    )
         else:
             st.warning("⚠️ Unexpected feature data format. Please regenerate features.")
             return
@@ -452,11 +475,28 @@ def display_model_registry():
 
         if not all_models:
             st.info("No models in registry yet.")
+
+            # Show registry statistics
+            try:
+                stats = registry.get_registry_stats()
+                st.write("**Registry Statistics:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Models", stats.get("total_models", 0))
+                with col2:
+                    st.metric("Active Models", stats.get("active_models", 0))
+            except Exception as e:
+                st.warning(f"Could not load registry stats: {e}")
             return
 
         # Convert to DataFrame for display
         registry_data = []
         for model_metadata in all_models:
+            # Get current stage for this model
+            current_stage = (
+                registry.get_model_stage(model_metadata.model_id) or "staging"
+            )
+
             registry_data.append(
                 {
                     "Model ID": model_metadata.model_id,
@@ -464,9 +504,21 @@ def display_model_registry():
                     "Type": model_metadata.model_type,
                     "Task": model_metadata.task_type,
                     "Version": model_metadata.version,
-                    "Stage": model_metadata.stage,
+                    "Stage": current_stage,
                     "Created": model_metadata.created_at.strftime("%Y-%m-%d %H:%M"),
-                    "Performance": f"{model_metadata.performance_metrics.get('accuracy', model_metadata.performance_metrics.get('r2_score', 'N/A')):.3f}",
+                    "Performance": (
+                        f"{model_metadata.performance_metrics.get('accuracy', model_metadata.performance_metrics.get('r2_score', 'N/A')):.3f}"
+                        if isinstance(
+                            model_metadata.performance_metrics.get(
+                                "accuracy",
+                                model_metadata.performance_metrics.get(
+                                    "r2_score", "N/A"
+                                ),
+                            ),
+                            (int, float),
+                        )
+                        else "N/A"
+                    ),
                 }
             )
 
@@ -479,22 +531,47 @@ def display_model_registry():
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("📥 Load Model from Registry"):
-                model_id = st.selectbox(
-                    "Select Model to Load", [m.model_id for m in all_models]
+            st.write("**Load Model:**")
+            model_options = [
+                (f"{m.model_name} ({m.model_id})", m.model_id) for m in all_models
+            ]
+
+            if model_options:
+                selected_model_display = st.selectbox(
+                    "Select Model to Load",
+                    [option[0] for option in model_options],
+                    key="load_model_select",
                 )
-                if model_id:
-                    try:
-                        loaded_model = registry.load_model(model_id)
-                        if loaded_model:
-                            st.success(f"Model {model_id} loaded successfully!")
-                        else:
-                            st.error("Failed to load model.")
-                    except Exception as e:
-                        st.error(f"Error loading model: {e}")
+
+                if st.button("📥 Load Selected Model", key="load_model_btn"):
+                    # Find the model_id for the selected display name
+                    selected_model_id = None
+                    for display_name, model_id in model_options:
+                        if display_name == selected_model_display:
+                            selected_model_id = model_id
+                            break
+
+                    if selected_model_id:
+                        try:
+                            loaded_model = registry.load_model(selected_model_id)
+                            if loaded_model:
+                                st.success(
+                                    f"Model {selected_model_id} loaded successfully!"
+                                )
+                                # Store in session state if needed
+                                st.session_state[
+                                    f"loaded_model_{selected_model_id}"
+                                ] = loaded_model
+                            else:
+                                st.error("Failed to load model.")
+                        except Exception as e:
+                            st.error(f"Error loading model: {e}")
+            else:
+                st.info("No models available to load")
 
         with col2:
-            if st.button("🗑️ Archive Old Models"):
+            st.write("**Archive Management:**")
+            if st.button("🗑️ Archive Old Models", key="archive_models_btn"):
                 # Archive models older than 30 days
                 try:
                     old_models = [
@@ -505,8 +582,16 @@ def display_model_registry():
                     for model in old_models:
                         registry.set_model_stage(model.model_id, "archived")
                     st.success(f"Archived {len(old_models)} old models.")
+                    st.rerun()  # Refresh the display
                 except Exception as e:
                     st.error(f"Error archiving models: {e}")
+
+            if st.button("📊 Show Registry Stats", key="show_stats_btn"):
+                try:
+                    stats = registry.get_registry_stats()
+                    st.json(stats)
+                except Exception as e:
+                    st.error(f"Error getting stats: {e}")
 
     except Exception as e:
         st.error(f"Error accessing model registry: {e}")
@@ -523,10 +608,30 @@ def train_model(
 
         # Handle different feature data types
         if isinstance(feature_data, dict):
-            st.error(
-                "⚠️ Feature data is configuration only. Please generate actual features first."
-            )
-            return
+            # Check if it's old format dict with actual data or just config
+            if "features" in feature_data and "data" in feature_data:
+                # Old format: Convert to DataFrame
+                features_dict = feature_data["features"]
+                original_data = feature_data["data"]
+
+                feature_df = pd.DataFrame(index=original_data.index)
+                for name, values in features_dict.items():
+                    if isinstance(values, pd.Series):
+                        feature_df[name] = values
+
+                if len(feature_df.columns) == 0:
+                    st.error(
+                        "⚠️ No valid features found in old format data. Please regenerate features."
+                    )
+                    return
+
+                feature_data = feature_df
+            else:
+                # Configuration dict
+                st.error(
+                    "⚠️ Feature data is configuration only. Please generate actual features first."
+                )
+                return
         elif not isinstance(feature_data, pd.DataFrame):
             st.error("⚠️ Unexpected feature data format. Please regenerate features.")
             return
