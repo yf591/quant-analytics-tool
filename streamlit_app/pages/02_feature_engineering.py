@@ -31,6 +31,7 @@ try:
     from components.charts import (
         create_technical_indicators_chart,
         create_advanced_features_chart,
+        create_information_bars_chart,
         create_feature_importance_chart,
         create_correlation_heatmap,
     )
@@ -333,54 +334,55 @@ def calculate_technical_indicators(
 
         display_computation_status("🔄 Processing results...", 0.8)
 
-        # Extract the values from TechnicalIndicatorResults objects
-        results = {}
-        for indicator_name, result_obj in all_results.items():
-            if hasattr(result_obj, "values"):
-                if isinstance(result_obj.values, pd.DataFrame):
-                    # Handle multi-column results like MACD
-                    for col in result_obj.values.columns:
-                        results[f"{indicator_name}_{col}"] = result_obj.values[col]
-                else:
-                    results[indicator_name] = result_obj.values
-            else:
-                results[indicator_name] = result_obj
+        # ★★★ 重要な修正点：データ形式を分離 ★★★
 
-        if not results:
+        # 1. チャート関数に渡す用の辞書を作成（元の構造を維持）
+        features_for_chart = {}
+        for name, result_obj in all_results.items():
+            if hasattr(result_obj, "values"):
+                features_for_chart[name] = result_obj.values
+
+        # 2. テーブル表示と後続処理用のDataFrameを作成（全カラムを展開）
+        feature_df_for_table = pd.DataFrame(index=normalized_data.index)
+        for name, values in features_for_chart.items():
+            if isinstance(values, pd.DataFrame):
+                # 複数カラムを持つ指標（MACD、Bollinger Bands、Stochastic等）
+                for col in values.columns:
+                    # 分かりやすい名前にする
+                    if name == "bollinger_bands":
+                        new_name = f"BB_{col}"
+                    elif name == "stochastic":
+                        new_name = f"Stoch_{col}"
+                    else:
+                        new_name = f"{name}_{col}"
+                    feature_df_for_table[new_name] = values[col]
+            elif isinstance(values, pd.Series):
+                # 単一カラムの指標（SMA、EMA、RSI等）
+                feature_df_for_table[name] = values
+
+        if feature_df_for_table.empty:
             st.warning("⚠️ No technical indicators were calculated successfully.")
             st.info(f"📊 Requested indicators: {indicators_to_calculate}")
             return
 
-        # Store results with additional metadata
+        # 3. セッションステートに保存
         feature_key = f"{ticker}_technical"
 
-        # Convert features dict to DataFrame for Model Training compatibility
-        feature_df = pd.DataFrame(index=normalized_data.index)
-        for name, values in results.items():
-            if isinstance(values, pd.Series):
-                feature_df[name] = values
-            else:
-                # Convert other types to Series if possible
-                try:
-                    feature_df[name] = pd.Series(values, index=normalized_data.index)
-                except:
-                    st.warning(f"Could not convert {name} to Series, skipping")
+        # テーブル表示やモデル学習用には、展開されたDataFrameを保存
+        st.session_state.feature_cache[feature_key] = feature_df_for_table
 
-        # Store DataFrame instead of dict for Model Training compatibility
-        st.session_state.feature_cache[feature_key] = feature_df
-
-        # Also store metadata separately if needed
+        # メタデータには、チャート描画用の元の構造を保った辞書を保存
         st.session_state.feature_cache[f"{feature_key}_metadata"] = {
             "original_data": normalized_data,
-            "features_dict": results,
+            "features_dict_for_chart": features_for_chart,  # ★新しいキーで保存
             "type": "technical",
             "config": config,
             "calculated_at": datetime.now(),
-            "indicators_count": len(results),
+            "indicators_count": len(features_for_chart),
         }
 
         display_computation_status(
-            f"✅ Successfully calculated {len(results)} technical indicators for {ticker}",
+            f"✅ Successfully calculated {len(features_for_chart)} technical indicators for {ticker}",
             1.0,
         )
         st.rerun()
@@ -754,10 +756,14 @@ def display_technical_results(feature_key: str):
             if metadata_key in st.session_state.feature_cache:
                 metadata = st.session_state.feature_cache[metadata_key]
                 original_data = metadata["original_data"]
-                features_dict = metadata["features_dict"]
+                # ★★★ ここでチャート用の辞書を取得 ★★★
+                features_dict_for_chart = metadata.get("features_dict_for_chart", {})
             else:
-                original_data = feature_df  # Fallback
-                features_dict = {col: feature_df[col] for col in feature_df.columns}
+                # フォールバック
+                original_data = feature_df
+                features_dict_for_chart = {
+                    col: feature_df[col] for col in feature_df.columns
+                }
         else:
             # Old format: Dict with data and features
             cached_features = cached_data
@@ -769,11 +775,13 @@ def display_technical_results(feature_key: str):
             for name, values in features_dict.items():
                 if isinstance(values, pd.Series):
                     feature_df[name] = values
+            features_dict_for_chart = features_dict
 
         # Debug information
         with st.expander("🔍 Debug Information", expanded=False):
             st.write(f"**Number of calculated indicators:** {len(feature_df.columns)}")
             st.write(f"**Indicator names:** {list(feature_df.columns)}")
+            st.write(f"**Chart indicators:** {list(features_dict_for_chart.keys())}")
             for col in feature_df.columns:
                 valid_count = feature_df[col].dropna().shape[0]
                 st.write(
@@ -785,13 +793,13 @@ def display_technical_results(feature_key: str):
             feature_df, title="📊 Technical Indicators", show_stats=True
         )
 
-        # Create and display chart
-        if len(feature_df.columns) > 0:
+        # Create and display chart with proper data format
+        if features_dict_for_chart:
             try:
                 chart = create_technical_indicators_chart(
                     data=original_data,
-                    indicators=features_dict,
-                    height=600,
+                    indicators=features_dict_for_chart,  # ★ここが重要★
+                    height=800,  # 高さを調整
                     title="Technical Indicators Analysis",
                 )
                 st.plotly_chart(chart, use_container_width=True)
@@ -830,14 +838,16 @@ def display_advanced_results(feature_key: str):
             if metadata_key in st.session_state.feature_cache:
                 metadata = st.session_state.feature_cache[metadata_key]
                 original_data = metadata["original_data"]
-                features_dict = metadata["features_dict"]
+                features_dict = metadata[
+                    "features_dict"
+                ].copy()  # Make a copy to avoid modifying original
             else:
                 original_data = feature_df  # Fallback
                 features_dict = {col: feature_df[col] for col in feature_df.columns}
         else:
             # Old format: Dict with data and features
             cached_features = cached_data
-            features_dict = cached_features["features"]
+            features_dict = cached_features["features"].copy()  # Make a copy
             original_data = cached_features["data"]
 
             # Convert to DataFrame for consistent handling
@@ -846,35 +856,105 @@ def display_advanced_results(feature_key: str):
                 if isinstance(values, pd.Series):
                     feature_df[name] = values
 
-        # Display feature table - pass DataFrame directly
-        display_feature_table(feature_df, title="🧠 Advanced Features", show_stats=True)
+        # Separate information_bars from other features
+        info_bars_data = features_dict.pop("information_bars", None)
 
-        # Create and display chart
-        if len(feature_df.columns) > 0:
-            try:
-                chart = create_advanced_features_chart(
-                    data=original_data,
-                    features=features_dict,
-                    height=600,
-                    title="Advanced Features Analysis",
+        # Display Series-based features
+        if features_dict:
+            # Create DataFrame with only Series features
+            series_features_df = pd.DataFrame(index=original_data.index)
+            for name, values in features_dict.items():
+                if isinstance(values, pd.Series):
+                    series_features_df[name] = values
+
+            if len(series_features_df.columns) > 0:
+                display_feature_table(
+                    series_features_df,
+                    title="🧠 Advanced Features (Time Series)",
+                    show_stats=True,
                 )
-                st.plotly_chart(chart, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error creating chart: {e}")
 
-                # Fallback: Show simple line charts
-                st.subheader("📈 Individual Feature Charts")
-                for col in feature_df.columns:
-                    values = feature_df[col].dropna()
-                    if not values.empty:
-                        fig = go.Figure()
-                        fig.add_trace(
-                            go.Scatter(x=values.index, y=values, mode="lines", name=col)
-                        )
-                        fig.update_layout(title=f"{col} Feature", height=300)
-                        st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No advanced features to display")
+                # Create and display chart for Series features only
+                try:
+                    chart = create_advanced_features_chart(
+                        data=original_data,
+                        features=features_dict,  # This now contains only Series
+                        height=600,
+                        title="Advanced Features Analysis",
+                    )
+                    st.plotly_chart(chart, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error creating advanced features chart: {e}")
+
+        # Display Information Bars separately
+        if (
+            info_bars_data is not None
+            and isinstance(info_bars_data, pd.DataFrame)
+            and not info_bars_data.empty
+        ):
+            st.markdown("---")
+            st.subheader("📊 Information-Driven Bars Analysis")
+            st.markdown(
+                "Data sampled by information content (e.g., volume) rather than time. "
+                "Each bar represents a fixed amount of trading activity."
+            )
+
+            # Display basic statistics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Bars", len(info_bars_data))
+            with col2:
+                if "volume" in info_bars_data.columns:
+                    avg_volume = info_bars_data["volume"].mean()
+                    st.metric("Avg Volume per Bar", f"{avg_volume:,.0f}")
+            with col3:
+                if "count" in info_bars_data.columns:
+                    avg_ticks = info_bars_data["count"].mean()
+                    st.metric("Avg Ticks per Bar", f"{avg_ticks:.1f}")
+
+            # Display data table
+            display_feature_table(
+                info_bars_data.head(20),
+                title="Information Bars Data (First 20 bars)",
+                show_stats=True,
+            )
+
+            # Create and display specialized chart
+            info_bars_chart = create_information_bars_chart(
+                info_bars_data,
+                title=f"Information-Driven Bars ({len(info_bars_data)} bars)",
+            )
+            st.plotly_chart(info_bars_chart, use_container_width=True)
+
+            # Additional analysis
+            if len(info_bars_data) > 1:
+                st.subheader("📈 Information Bars Statistics")
+
+                # Time between bars analysis
+                time_diffs = info_bars_data.index.to_series().diff().dropna()
+                if len(time_diffs) > 0:
+                    avg_time_diff = time_diffs.mean()
+                    st.write(f"**Average time between bars:** {avg_time_diff}")
+
+                    # Show distribution of time intervals
+                    fig_hist = go.Figure(
+                        data=[
+                            go.Histogram(
+                                x=time_diffs.dt.total_seconds()
+                                / 60,  # Convert to minutes
+                                nbinsx=20,
+                                name="Time Intervals",
+                            )
+                        ]
+                    )
+                    fig_hist.update_layout(
+                        title="Distribution of Time Intervals Between Bars (minutes)",
+                        xaxis_title="Minutes",
+                        yaxis_title="Frequency",
+                        template="plotly_white",
+                    )
+                    st.plotly_chart(fig_hist, use_container_width=True)
+
     else:
         st.error(f"Feature key {feature_key} not found in cache")
 
@@ -946,7 +1026,15 @@ def display_feature_visualization(feature_set_key: str):
             if metadata_key in st.session_state.feature_cache:
                 metadata = st.session_state.feature_cache[metadata_key]
                 original_data = metadata["original_data"]
-                features_dict = metadata["features_dict"]
+                # Handle different metadata formats
+                if "features_dict_for_chart" in metadata:
+                    features_dict = metadata[
+                        "features_dict_for_chart"
+                    ]  # Technical indicators
+                elif "features_dict" in metadata:
+                    features_dict = metadata["features_dict"]  # Advanced features
+                else:
+                    features_dict = {col: feature_df[col] for col in feature_df.columns}
                 feature_type = metadata["type"]
             else:
                 # Fallback if no metadata

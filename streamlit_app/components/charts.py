@@ -137,8 +137,8 @@ def create_price_chart(
 def create_technical_indicators_chart(
     data: pd.DataFrame,
     price_col: str = "Close",
-    indicators: Dict[str, pd.Series] = None,
-    height: int = 600,
+    indicators: Dict[str, Union[pd.Series, pd.DataFrame]] = None,
+    height: int = 800,
     title: str = "Technical Indicators",
 ) -> go.Figure:
     """
@@ -147,7 +147,7 @@ def create_technical_indicators_chart(
     Args:
         data: DataFrame with price data
         price_col: Name of price column
-        indicators: Dictionary of indicator name to Series
+        indicators: Dictionary of indicator name to Series/DataFrame
         height: Chart height
         title: Chart title
 
@@ -157,6 +157,301 @@ def create_technical_indicators_chart(
     try:
         if indicators is None:
             indicators = {}
+
+        # Validate data input
+        if not isinstance(data, pd.DataFrame):
+            st.error("Data must be a DataFrame")
+            return go.Figure()
+
+        # Flexible column name handling for price
+        actual_price_col = None
+        for col in data.columns:
+            if col.lower() == price_col.lower():
+                actual_price_col = col
+                break
+
+        if actual_price_col is None:
+            # Try common price column names
+            for col in data.columns:
+                if col.lower() in ["close", "price", "adj close"]:
+                    actual_price_col = col
+                    break
+
+        if actual_price_col is None:
+            st.error(f"Price column '{price_col}' not found in data")
+            return go.Figure()
+
+        # --- サブプロットの動的生成 ---
+        subplot_titles = ["Price, Moving Averages & Bollinger Bands"]
+        has_oscillators = any(
+            "rsi" in k.lower() or "stochastic" in k.lower() or "williams" in k.lower()
+            for k in indicators.keys()
+        )
+        has_macd = any("macd" in k.lower() for k in indicators.keys())
+        has_atr = any("atr" in k.lower() for k in indicators.keys())
+
+        if has_oscillators:
+            subplot_titles.append("Oscillators (RSI, Stochastic, Williams %R)")
+        if has_macd:
+            subplot_titles.append("MACD")
+        if has_atr:
+            subplot_titles.append("ATR (Volatility)")
+
+        # サブプロットを作成
+        fig = make_subplots(
+            rows=len(subplot_titles),
+            cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            subplot_titles=subplot_titles,
+        )
+
+        # --- 各プロットへの描画 ---
+        # 1. Price Chart
+        fig.add_trace(
+            go.Scatter(
+                x=data.index,
+                y=data[actual_price_col],
+                name="Price",
+                line=dict(color="blue", width=2),
+            ),
+            row=1,
+            col=1,
+        )
+
+        # 行番号を動的に計算
+        current_row = 2
+        oscillator_row = current_row if has_oscillators else None
+        if has_oscillators:
+            current_row += 1
+        macd_row = current_row if has_macd else None
+        if has_macd:
+            current_row += 1
+        atr_row = current_row if has_atr else None
+
+        # 2. 各インジケーターをループで描画
+        colors = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
+        color_idx = 0
+
+        for name, values in indicators.items():
+            name_lower = name.lower()
+
+            # Moving Averages (row 1)
+            if "sma" in name_lower or "ema" in name_lower:
+                fig.add_trace(
+                    go.Scatter(
+                        x=values.index,
+                        y=values,
+                        name=name.upper(),
+                        line=dict(color=colors[color_idx % len(colors)], dash="dot"),
+                    ),
+                    row=1,
+                    col=1,
+                )
+                color_idx += 1
+
+            # Bollinger Bands (row 1)
+            elif "bollinger" in name_lower:
+                if isinstance(values, pd.DataFrame):
+                    # Upper Band
+                    if "Upper" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["Upper"],
+                                name="BB Upper",
+                                line=dict(color="rgba(255,165,0,0.8)", dash="dash"),
+                            ),
+                            row=1,
+                            col=1,
+                        )
+                    # Lower Band with fill
+                    if "Lower" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["Lower"],
+                                name="BB Lower",
+                                line=dict(color="rgba(255,165,0,0.8)", dash="dash"),
+                                fill="tonexty",
+                                fillcolor="rgba(255,165,0,0.1)",
+                            ),
+                            row=1,
+                            col=1,
+                        )
+                    # Middle Band
+                    if "Middle" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["Middle"],
+                                name="BB Middle",
+                                line=dict(color="rgba(255,165,0,1.0)"),
+                            ),
+                            row=1,
+                            col=1,
+                        )
+
+            # Oscillators (oscillator_row)
+            elif oscillator_row and (
+                "rsi" in name_lower
+                or "stochastic" in name_lower
+                or "williams" in name_lower
+            ):
+                if isinstance(values, pd.DataFrame):
+                    # Stochastic case
+                    if "%K" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["%K"],
+                                name="Stoch %K",
+                                line=dict(color=colors[color_idx % len(colors)]),
+                            ),
+                            row=oscillator_row,
+                            col=1,
+                        )
+                        color_idx += 1
+                    if "%D" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["%D"],
+                                name="Stoch %D",
+                                line=dict(color=colors[color_idx % len(colors)]),
+                            ),
+                            row=oscillator_row,
+                            col=1,
+                        )
+                        color_idx += 1
+
+                    # Add reference lines for Stochastic
+                    fig.add_hline(
+                        y=80,
+                        line_dash="dash",
+                        line_color="red",
+                        row=oscillator_row,
+                        col=1,
+                    )
+                    fig.add_hline(
+                        y=20,
+                        line_dash="dash",
+                        line_color="green",
+                        row=oscillator_row,
+                        col=1,
+                    )
+                else:
+                    # RSI, Williams %R (Series)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=values.index,
+                            y=values,
+                            name=name.upper(),
+                            line=dict(color=colors[color_idx % len(colors)]),
+                        ),
+                        row=oscillator_row,
+                        col=1,
+                    )
+                    color_idx += 1
+
+                    # Add reference lines for RSI
+                    if "rsi" in name_lower:
+                        fig.add_hline(
+                            y=70,
+                            line_dash="dash",
+                            line_color="red",
+                            row=oscillator_row,
+                            col=1,
+                        )
+                        fig.add_hline(
+                            y=30,
+                            line_dash="dash",
+                            line_color="green",
+                            row=oscillator_row,
+                            col=1,
+                        )
+
+            # MACD (macd_row)
+            elif macd_row and "macd" in name_lower:
+                if isinstance(values, pd.DataFrame):
+                    if "MACD" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["MACD"],
+                                name="MACD Line",
+                                line=dict(color="#2ca02c"),
+                            ),
+                            row=macd_row,
+                            col=1,
+                        )
+                    if "Signal" in values.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=values.index,
+                                y=values["Signal"],
+                                name="Signal Line",
+                                line=dict(color="#ff7f0e"),
+                            ),
+                            row=macd_row,
+                            col=1,
+                        )
+                    if "Histogram" in values.columns:
+                        fig.add_trace(
+                            go.Bar(
+                                x=values.index,
+                                y=values["Histogram"],
+                                name="MACD Histogram",
+                                marker_color="rgba(255, 0, 0, 0.7)",
+                            ),
+                            row=macd_row,
+                            col=1,
+                        )
+
+                    # Add zero line for MACD
+                    fig.add_hline(
+                        y=0, line_dash="dot", line_color="gray", row=macd_row, col=1
+                    )
+
+            # ATR (atr_row)
+            elif atr_row and "atr" in name_lower:
+                fig.add_trace(
+                    go.Scatter(
+                        x=values.index,
+                        y=values,
+                        name="ATR",
+                        line=dict(color=colors[color_idx % len(colors)]),
+                    ),
+                    row=atr_row,
+                    col=1,
+                )
+                color_idx += 1
+
+        # レイアウト更新
+        fig.update_layout(
+            height=height,
+            title=title,
+            template="plotly_white",
+            hovermode="x unified",
+            showlegend=True,
+        )
+
+        # Y軸のタイトルを設定
+        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+        if oscillator_row:
+            fig.update_yaxes(title_text="Oscillator Values", row=oscillator_row, col=1)
+        if macd_row:
+            fig.update_yaxes(title_text="MACD", row=macd_row, col=1)
+        if atr_row:
+            fig.update_yaxes(title_text="ATR", row=atr_row, col=1)
+
+        fig.update_xaxes(title_text="Date", row=len(subplot_titles), col=1)
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating technical indicators chart: {str(e)}")
+        return go.Figure()
 
         # Validate data input
         if not isinstance(data, pd.DataFrame):
@@ -181,18 +476,50 @@ def create_technical_indicators_chart(
             st.error(f"Price column '{price_col}' not found in data")
             return go.Figure()
 
+        # Determine number of subplots needed based on available indicators
+        subplot_count = 1  # Always have price chart
+        has_oscillators = any(
+            "RSI" in name or "Stochastic" in name or "Williams" in name
+            for name in indicators.keys()
+        )
+        has_macd = any("MACD" in name for name in indicators.keys())
+        has_volume_indicators = any(
+            "ATR" in name or "Volume" in name for name in indicators.keys()
+        )
+
+        if has_oscillators:
+            subplot_count += 1
+        if has_macd:
+            subplot_count += 1
+        if has_volume_indicators:
+            subplot_count += 1
+
+        # Create dynamic subplot titles and heights
+        subplot_titles = ["Price with Moving Averages & Bollinger Bands"]
+        row_heights = [0.4]
+
+        if has_oscillators:
+            subplot_titles.append("Oscillators (RSI, Stochastic, Williams %R)")
+            row_heights.append(0.2)
+        if has_macd:
+            subplot_titles.append("MACD")
+            row_heights.append(0.2)
+        if has_volume_indicators:
+            subplot_titles.append("Volume Indicators (ATR)")
+            row_heights.append(0.2)
+
+        # Normalize row heights to sum to 1
+        total_height = sum(row_heights)
+        row_heights = [h / total_height for h in row_heights]
+
         # Create subplots
         fig = make_subplots(
-            rows=3,
+            rows=subplot_count,
             cols=1,
             shared_xaxes=True,
             vertical_spacing=0.02,
-            subplot_titles=(
-                "Price with Moving Averages",
-                "Oscillators (RSI, Stochastic)",
-                "MACD",
-            ),
-            row_heights=[0.5, 0.25, 0.25],
+            subplot_titles=subplot_titles,
+            row_heights=row_heights,
         )
 
         # Price chart
@@ -208,12 +535,38 @@ def create_technical_indicators_chart(
             col=1,
         )
 
-        # Add moving averages to price chart
-        colors = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+        # Add moving averages and Bollinger Bands to price chart
+        colors = [
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+        ]
         color_idx = 0
+
+        # Track current row for dynamic subplot assignment
+        current_row = 1
+        oscillator_row = None
+        macd_row = None
+        volume_row = None
+
+        # Assign row numbers based on what indicators are available
+        if has_oscillators:
+            current_row += 1
+            oscillator_row = current_row
+        if has_macd:
+            current_row += 1
+            macd_row = current_row
+        if has_volume_indicators:
+            current_row += 1
+            volume_row = current_row
 
         for name, series in indicators.items():
             if isinstance(series, pd.Series) and len(series) > 0:
+                # Moving Averages
                 if "SMA" in name or "EMA" in name or "MA" in name:
                     fig.add_trace(
                         go.Scatter(
@@ -222,44 +575,164 @@ def create_technical_indicators_chart(
                             mode="lines",
                             name=name,
                             line=dict(color=colors[color_idx % len(colors)], width=1),
+                            hovertemplate=f"{name}: %{{y:.2f}}<extra></extra>",
                         ),
                         row=1,
                         col=1,
                     )
                     color_idx += 1
 
-                elif "RSI" in name:
+                # Bollinger Bands
+                elif "Bollinger" in name or "BB" in name:
+                    if "Upper" in name:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=series.index,
+                                y=series.values,
+                                mode="lines",
+                                name=name,
+                                line=dict(
+                                    color="rgba(255, 0, 0, 0.5)", width=1, dash="dash"
+                                ),
+                                hovertemplate=f"{name}: %{{y:.2f}}<extra></extra>",
+                            ),
+                            row=1,
+                            col=1,
+                        )
+                    elif "Lower" in name:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=series.index,
+                                y=series.values,
+                                mode="lines",
+                                name=name,
+                                line=dict(
+                                    color="rgba(0, 255, 0, 0.5)", width=1, dash="dash"
+                                ),
+                                hovertemplate=f"{name}: %{{y:.2f}}<extra></extra>",
+                            ),
+                            row=1,
+                            col=1,
+                        )
+                    else:  # Middle band
+                        fig.add_trace(
+                            go.Scatter(
+                                x=series.index,
+                                y=series.values,
+                                mode="lines",
+                                name=name,
+                                line=dict(color="rgba(0, 0, 255, 0.7)", width=1),
+                                hovertemplate=f"{name}: %{{y:.2f}}<extra></extra>",
+                            ),
+                            row=1,
+                            col=1,
+                        )
+
+                # Oscillators (RSI, Stochastic, Williams %R)
+                elif oscillator_row and (
+                    "RSI" in name
+                    or "Stochastic" in name
+                    or "Williams" in name
+                    or "Stoch" in name
+                ):
                     fig.add_trace(
                         go.Scatter(
                             x=series.index,
                             y=series.values,
                             mode="lines",
                             name=name,
-                            line=dict(color="#ff7f0e"),
+                            line=dict(color=colors[color_idx % len(colors)]),
+                            hovertemplate=f"{name}: %{{y:.2f}}<extra></extra>",
                         ),
-                        row=2,
+                        row=oscillator_row,
                         col=1,
                     )
-                    # Add RSI levels
-                    fig.add_hline(
-                        y=70, line_dash="dash", line_color="red", row=2, col=1
-                    )
-                    fig.add_hline(
-                        y=30, line_dash="dash", line_color="green", row=2, col=1
+                    color_idx += 1
+
+                    # Add reference lines for RSI
+                    if "RSI" in name:
+                        fig.add_hline(
+                            y=70,
+                            line_dash="dash",
+                            line_color="red",
+                            row=oscillator_row,
+                            col=1,
+                            annotation_text="Overbought (70)",
+                        )
+                        fig.add_hline(
+                            y=30,
+                            line_dash="dash",
+                            line_color="green",
+                            row=oscillator_row,
+                            col=1,
+                            annotation_text="Oversold (30)",
+                        )
+
+                    # Add reference lines for Stochastic
+                    elif "Stochastic" in name or "Stoch" in name:
+                        fig.add_hline(
+                            y=80,
+                            line_dash="dash",
+                            line_color="red",
+                            row=oscillator_row,
+                            col=1,
+                        )
+                        fig.add_hline(
+                            y=20,
+                            line_dash="dash",
+                            line_color="green",
+                            row=oscillator_row,
+                            col=1,
+                        )
+
+                # MACD
+                elif macd_row and "MACD" in name:
+                    line_style = dict(color="#2ca02c")
+                    if "Signal" in name:
+                        line_style = dict(color="#ff7f0e", dash="dash")
+                    elif "Histogram" in name:
+                        # Use bar chart for MACD histogram
+                        fig.add_trace(
+                            go.Bar(
+                                x=series.index,
+                                y=series.values,
+                                name=name,
+                                marker_color="rgba(255, 0, 0, 0.7)",
+                                hovertemplate=f"{name}: %{{y:.4f}}<extra></extra>",
+                            ),
+                            row=macd_row,
+                            col=1,
+                        )
+                        continue
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=series.index,
+                            y=series.values,
+                            mode="lines",
+                            name=name,
+                            line=line_style,
+                            hovertemplate=f"{name}: %{{y:.4f}}<extra></extra>",
+                        ),
+                        row=macd_row,
+                        col=1,
                     )
 
-                elif "MACD" in name:
+                # Volume Indicators (ATR, etc.)
+                elif volume_row and ("ATR" in name or "Volume" in name):
                     fig.add_trace(
                         go.Scatter(
                             x=series.index,
                             y=series.values,
                             mode="lines",
                             name=name,
-                            line=dict(color="#2ca02c"),
+                            line=dict(color=colors[color_idx % len(colors)]),
+                            hovertemplate=f"{name}: %{{y:.4f}}<extra></extra>",
                         ),
-                        row=3,
+                        row=volume_row,
                         col=1,
                     )
+                    color_idx += 1
 
         # Update layout
         fig.update_layout(
@@ -468,4 +941,86 @@ def create_advanced_features_chart(
 
     except Exception as e:
         st.error(f"Error creating advanced features chart: {str(e)}")
+        return go.Figure()
+
+
+def create_information_bars_chart(
+    bars_data: pd.DataFrame,
+    height: int = 500,
+    title: str = "Information-Driven Bars",
+) -> go.Figure:
+    """
+    Create an interactive OHLC chart for information-driven bars.
+
+    Args:
+        bars_data: DataFrame with OHLC data for bars
+        height: Chart height
+        title: Chart title
+
+    Returns:
+        Plotly figure object
+    """
+    try:
+        required_cols = ["open", "high", "low", "close"]
+        if not all(col in bars_data.columns for col in required_cols):
+            st.warning(
+                f"Information bars data is missing OHLC columns. Available columns: {list(bars_data.columns)}"
+            )
+            return go.Figure()
+
+        if len(bars_data) == 0:
+            st.warning("Information bars data is empty")
+            return go.Figure()
+
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=bars_data.index,
+                    open=bars_data["open"],
+                    high=bars_data["high"],
+                    low=bars_data["low"],
+                    close=bars_data["close"],
+                    name="Information Bars",
+                )
+            ]
+        )
+
+        # Add volume bars if available
+        if "volume" in bars_data.columns:
+            fig.add_trace(
+                go.Bar(
+                    x=bars_data.index,
+                    y=bars_data["volume"],
+                    name="Volume",
+                    yaxis="y2",
+                    marker_color="rgba(255, 165, 0, 0.7)",
+                    opacity=0.7,
+                )
+            )
+
+            # Create secondary y-axis for volume
+            fig.update_layout(
+                yaxis2=dict(
+                    title="Volume",
+                    overlaying="y",
+                    side="right",
+                    showgrid=False,
+                ),
+            )
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Time (Event-driven)",
+            yaxis_title="Price",
+            height=height,
+            template="plotly_white",
+            xaxis_rangeslider_visible=False,
+            hovermode="x unified",
+            showlegend=True,
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating information bars chart: {str(e)}")
         return go.Figure()
