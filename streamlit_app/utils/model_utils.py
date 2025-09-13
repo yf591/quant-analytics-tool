@@ -25,12 +25,12 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 try:
-    # Week 7: Traditional ML Models
-    from src.models import (
-        ModelFactory,
-        ModelEvaluator,
+    # Week 7: Traditional ML Models - Import from specific modules
+    from src.models.traditional.random_forest import (
         QuantRandomForestClassifier,
         QuantRandomForestRegressor,
+    )
+    from src.models.traditional.xgboost_model import (
         QuantXGBoostClassifier,
         QuantXGBoostRegressor,
     )
@@ -38,6 +38,10 @@ try:
         QuantSVMClassifier,
         QuantSVMRegressor,
     )
+
+    # Base classes and utilities
+    from src.models.base import ModelFactory
+    from src.models.evaluation import ModelEvaluator
 
     # Week 8: Deep Learning Models
     from src.models.deep_learning import (
@@ -670,8 +674,8 @@ class ModelTrainingManager:
         """
 
         hyperparams_map = {
-            # Week 7: Traditional ML Models
-            "random_forest": {
+            # Week 7: Traditional ML Models - Scikit-learn classes
+            "RandomForestClassifier": {
                 "n_estimators": 100,
                 "max_depth": 10,
                 "min_samples_split": 2,
@@ -680,7 +684,16 @@ class ModelTrainingManager:
                 "bootstrap": True,
                 "random_state": 42,
             },
-            "xgboost": {
+            "RandomForestRegressor": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1,
+                "max_features": "sqrt",
+                "bootstrap": True,
+                "random_state": 42,
+            },
+            "XGBClassifier": {
                 "n_estimators": 100,
                 "max_depth": 6,
                 "learning_rate": 0.1,
@@ -690,7 +703,17 @@ class ModelTrainingManager:
                 "reg_lambda": 1.0,
                 "random_state": 42,
             },
-            "svm": {
+            "XGBRegressor": {
+                "n_estimators": 100,
+                "max_depth": 6,
+                "learning_rate": 0.1,
+                "subsample": 0.8,
+                "colsample_bytree": 1.0,
+                "reg_alpha": 0.0,
+                "reg_lambda": 1.0,
+                "random_state": 42,
+            },
+            "SVC": {
                 "C": 1.0,
                 "kernel": "rbf",
                 "gamma": "scale",
@@ -699,8 +722,40 @@ class ModelTrainingManager:
                 "probability": True,
                 "random_state": 42,
             },
-            # Week 8: Deep Learning Models
-            "lstm": {
+            "SVR": {
+                "C": 1.0,
+                "kernel": "rbf",
+                "gamma": "scale",
+                "degree": 3,
+                "coef0": 0.0,
+                "epsilon": 0.1,
+            },
+            "LogisticRegression": {
+                "C": 1.0,
+                "penalty": "l2",
+                "solver": "liblinear",
+                "random_state": 42,
+            },
+            "LinearRegression": {
+                "fit_intercept": True,
+                "normalize": False,
+            },
+            "DecisionTreeClassifier": {
+                "max_depth": 10,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1,
+                "max_features": "sqrt",
+                "random_state": 42,
+            },
+            "DecisionTreeRegressor": {
+                "max_depth": 10,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1,
+                "max_features": "sqrt",
+                "random_state": 42,
+            },
+            # Week 8: Deep Learning Models - Custom classes
+            "QuantLSTMClassifier": {
                 "hidden_size": 64,
                 "num_layers": 2,
                 "dropout": 0.2,
@@ -710,7 +765,7 @@ class ModelTrainingManager:
                 "bidirectional": False,
                 "sequence_length": 60,
             },
-            "gru": {
+            "QuantLSTMRegressor": {
                 "hidden_size": 64,
                 "num_layers": 2,
                 "dropout": 0.2,
@@ -720,7 +775,58 @@ class ModelTrainingManager:
                 "bidirectional": False,
                 "sequence_length": 60,
             },
-            "transformer": {
+            "QuantGRUClassifier": {
+                "hidden_size": 64,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+                "bidirectional": False,
+                "sequence_length": 60,
+            },
+            "QuantGRURegressor": {
+                "hidden_size": 64,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+                "bidirectional": False,
+                "sequence_length": 60,
+            },
+            # Week 9: Advanced Models - Custom classes
+            "StackingEnsemble": {
+                "base_models": ["RandomForestClassifier", "XGBClassifier", "SVC"],
+                "meta_model": "LogisticRegression",
+                "cv_folds": 5,
+                "use_probabilities": True,
+                "random_state": 42,
+            },
+            "VotingEnsemble": {
+                "models": ["RandomForestClassifier", "XGBClassifier", "SVC"],
+                "voting": "soft",
+                "weights": None,
+                "n_jobs": -1,
+            },
+            "FinancialRandomForest": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 2,
+                "bootstrap": True,
+                "sample_weights": True,
+                "feature_importance_method": "shap",
+                "random_state": 42,
+            },
+            "MetaLabelingModel": {
+                "primary_model": "RandomForestClassifier",
+                "meta_model": "LogisticRegression",
+                "profit_target": 0.02,
+                "stop_loss": 0.01,
+                "time_horizon": 5,
+                "use_sample_weights": True,
+            },
+            "TransformerClassifier": {
                 "d_model": 64,
                 "nhead": 8,
                 "num_layers": 4,
@@ -730,60 +836,33 @@ class ModelTrainingManager:
                 "epochs": 100,
                 "sequence_length": 60,
             },
-            # Week 9: Advanced Models
-            "financial_random_forest": {
-                "n_estimators": 100,
-                "max_depth": 10,
-                "min_samples_split": 2,
-                "bootstrap": True,
-                "sample_weights": True,
-                "feature_importance_method": "shap",
-                "random_state": 42,
-            },
-            "stacking_ensemble": {
-                "base_models": ["random_forest", "xgboost", "svm"],
-                "meta_model": "logistic_regression",
-                "cv_folds": 5,
-                "use_probabilities": True,
-                "random_state": 42,
-            },
-            "voting_ensemble": {
-                "models": ["random_forest", "xgboost", "svm"],
-                "voting": "soft",
-                "weights": None,
-                "n_jobs": -1,
-            },
-            "time_series_bagging": {
-                "base_estimator": "random_forest",
-                "n_estimators": 10,
-                "max_samples": 1.0,
-                "bootstrap": True,
-                "bootstrap_features": False,
-                "random_state": 42,
-            },
-            "meta_labeling": {
-                "primary_model": "random_forest",
-                "meta_model": "logistic_regression",
-                "profit_target": 0.02,
-                "stop_loss": 0.01,
-                "time_horizon": 5,
-                "use_sample_weights": True,
+            "TransformerRegressor": {
+                "d_model": 64,
+                "nhead": 8,
+                "num_layers": 4,
+                "dropout": 0.1,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+                "sequence_length": 60,
             },
             # Week 9: Attention Models
-            "multi-head_attention": {
+            "AttentionLayer": {
+                "units": 64,
+                "use_bias": True,
+            },
+            "MultiHeadAttention": {
                 "d_model": 64,
                 "num_heads": 8,
                 "dropout_rate": 0.1,
                 "use_bias": True,
             },
-            "temporal_attention": {
+            "TemporalAttention": {
                 "units": 64,
                 "time_steps": 60,
                 "return_sequences": True,
                 "dropout_rate": 0.1,
             },
-            # Ensemble fallback
-            "ensemble": {"n_estimators": 100, "random_state": 42},
         }
 
         return hyperparams_map.get(model_type, {})

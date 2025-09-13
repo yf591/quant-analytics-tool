@@ -24,16 +24,31 @@ if project_root not in sys.path:
 
 # Enhanced imports with Week 10 Pipeline support
 try:
-    from src.models.training_pipeline import ModelTrainingPipeline
-    from src.models.model_manager import ModelTrainingManager
-    from src.models.model_registry import ModelRegistry
+    from src.models.pipeline.training_pipeline import ModelTrainingPipeline
+    from src.models.pipeline.model_registry import ModelRegistry
 
+    # ModelTrainingManager is already imported from model_utils
     WEEK10_PIPELINE_AVAILABLE = True
 except ImportError:
     WEEK10_PIPELINE_AVAILABLE = False
 
 # Traditional ML Models (Week 7)
 try:
+    # Import your custom financial ML models
+    from src.models.traditional.random_forest import (
+        QuantRandomForestClassifier,
+        QuantRandomForestRegressor,
+    )
+    from src.models.traditional.xgboost_model import (
+        QuantXGBoostClassifier,
+        QuantXGBoostRegressor,
+    )
+    from src.models.traditional.svm_model import (
+        QuantSVMClassifier,
+        QuantSVMRegressor,
+    )
+
+    # Also import sklearn models for comparison if needed
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
     from sklearn.svm import SVC, SVR
@@ -60,21 +75,46 @@ except ImportError:
 
 # Deep Learning Models (Week 8)
 try:
-    from src.models.deep_learning import LSTMModel, GRUModel, TransformerModel
-    from src.models.deep_learning import CNNModel, RNNModel, BiLSTMModel
+    from src.models.deep_learning import (
+        QuantLSTMClassifier,
+        QuantLSTMRegressor,
+        QuantGRUClassifier,
+        QuantGRURegressor,
+        LSTMDataPreprocessor,
+    )
+
+    # Try importing TensorFlow to ensure deep learning is available
+    import tensorflow as tf
 
     DEEP_LEARNING_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"Deep Learning models not available: {e}")
     DEEP_LEARNING_AVAILABLE = False
 
 # Advanced Models (Week 9)
 try:
-    from src.models.ensemble import StackingEnsemble, VotingEnsemble, BaggingEnsemble
-    from src.models.attention import AttentionModel, MultiHeadAttention, SelfAttention
-    from src.models.meta_labeling import MetaLabelingModel, TripleBarrierLabeling
+    from src.models.advanced.ensemble import (
+        StackingEnsemble,
+        VotingEnsemble,
+        FinancialRandomForest,
+    )
+    from src.models.advanced.attention import (
+        AttentionLayer,
+        MultiHeadAttention,
+        TemporalAttention,
+    )
+    from src.models.advanced.meta_labeling import (
+        MetaLabelingModel,
+        TripleBarrierLabeling,
+    )
+    from src.models.advanced.transformer import (
+        TransformerClassifier,
+        TransformerRegressor,
+    )
 
     ADVANCED_MODELS_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"Advanced models not available: {e}")
     ADVANCED_MODELS_AVAILABLE = False
 
 # Import UI components
@@ -115,6 +155,55 @@ class DummyModel:
         return np.zeros(len(X))
 
 
+def generate_test_feature_data():
+    """Generate synthetic test feature data for model training demos"""
+    try:
+        # Create synthetic financial time series data
+        dates = pd.date_range(start="2023-01-01", end="2024-01-01", freq="D")
+        n_samples = len(dates)
+
+        # Generate synthetic price data
+        np.random.seed(42)
+        price_base = 100
+        returns = np.random.normal(0.001, 0.02, n_samples)
+        prices = [price_base]
+
+        for ret in returns[1:]:
+            prices.append(prices[-1] * (1 + ret))
+
+        # Create DataFrame with technical indicators
+        data = pd.DataFrame(index=dates)
+        data["close"] = prices
+        data["volume"] = np.random.lognormal(10, 0.5, n_samples)
+        data["high"] = data["close"] * (1 + np.random.uniform(0, 0.03, n_samples))
+        data["low"] = data["close"] * (1 - np.random.uniform(0, 0.03, n_samples))
+        data["open"] = data["close"].shift(1) * (
+            1 + np.random.normal(0, 0.01, n_samples)
+        )
+
+        # Technical indicators
+        data["sma_20"] = data["close"].rolling(20).mean()
+        data["sma_50"] = data["close"].rolling(50).mean()
+        data["rsi"] = np.random.uniform(20, 80, n_samples)  # Simplified RSI
+        data["macd"] = np.random.normal(0, 0.5, n_samples)
+        data["bollinger_upper"] = data["close"] * 1.02
+        data["bollinger_lower"] = data["close"] * 0.98
+        data["returns"] = data["close"].pct_change()
+        data["volatility"] = data["returns"].rolling(20).std()
+
+        # Clean data
+        data = data.dropna()
+
+        # Store in session state
+        st.session_state.feature_cache["test_data"] = data
+
+        return True
+
+    except Exception as e:
+        st.error(f"Failed to generate test data: {e}")
+        return False
+
+
 def main():
     """Main Model Training Page"""
     st.title("🤖 Model Training")
@@ -150,6 +239,13 @@ def show_model_training():
         st.warning(
             "⚠️ No feature data available. Please generate features first on the Feature Engineering page."
         )
+
+        # Add test data option
+        if st.button("🧪 Generate Test Data for Demo"):
+            generate_test_feature_data()
+            st.success("✅ Test feature data generated!")
+            st.rerun()
+
         return
 
     # Display available advanced capabilities
@@ -160,29 +256,42 @@ def show_model_training():
             st.write("**Week 10 Pipeline:**")
             if WEEK10_PIPELINE_AVAILABLE:
                 st.success("✅ Available")
+                st.caption("• Training Pipeline\n• Model Registry\n• Deployment")
             else:
                 st.warning("❌ Not Available")
+                st.caption("Missing: pipeline modules")
 
         with col2:
             st.write("**Traditional ML:**")
             if TRADITIONAL_ML_AVAILABLE:
                 st.success("✅ Available")
+                models_list = ["• Random Forest", "• SVM", "• Decision Tree"]
+                if XGBOOST_AVAILABLE:
+                    models_list.append("• XGBoost")
+                if LIGHTGBM_AVAILABLE:
+                    models_list.append("• LightGBM")
+                st.caption("\n".join(models_list))
             else:
                 st.warning("❌ Not Available")
+                st.caption("Missing: scikit-learn")
 
         with col3:
             st.write("**Deep Learning:**")
             if DEEP_LEARNING_AVAILABLE:
                 st.success("✅ Available")
+                st.caption("• LSTM Models\n• GRU Models\n• TensorFlow Backend")
             else:
                 st.warning("❌ Not Available")
+                st.caption("Missing: deep learning modules")
 
         with col4:
             st.write("**Advanced Models:**")
             if ADVANCED_MODELS_AVAILABLE:
                 st.success("✅ Available")
+                st.caption("• Ensemble Methods\n• Attention Models\n• Transformers")
             else:
                 st.warning("❌ Not Available")
+                st.caption("Missing: advanced modules")
 
     # Feature selection
     st.subheader("📊 Feature Data Selection")
@@ -285,12 +394,17 @@ def get_model_selection(category: str) -> Dict:
     model_config = {}
 
     if category == "Traditional ML":
-        # Week 7 Traditional ML Models
+        # Week 7 Traditional ML Models - Use your custom financial ML models
         model_options = {}
 
         if TRADITIONAL_ML_AVAILABLE:
             model_options.update(
                 {
+                    "Quant Random Forest Classifier": "QuantRandomForestClassifier",
+                    "Quant Random Forest Regressor": "QuantRandomForestRegressor",
+                    "Quant SVM Classifier": "QuantSVMClassifier",
+                    "Quant SVM Regressor": "QuantSVMRegressor",
+                    # Also include basic sklearn models for comparison
                     "Random Forest": "RandomForestClassifier",
                     "Gradient Boosting": "GradientBoostingClassifier",
                     "SVM": "SVC",
@@ -300,7 +414,13 @@ def get_model_selection(category: str) -> Dict:
             )
 
         if XGBOOST_AVAILABLE:
-            model_options["XGBoost"] = "XGBClassifier"
+            model_options.update(
+                {
+                    "Quant XGBoost Classifier": "QuantXGBoostClassifier",
+                    "Quant XGBoost Regressor": "QuantXGBoostRegressor",
+                    "XGBoost": "XGBClassifier",
+                }
+            )
 
         if LIGHTGBM_AVAILABLE:
             model_options["LightGBM"] = "LGBMClassifier"
@@ -327,12 +447,10 @@ def get_model_selection(category: str) -> Dict:
             return {}
 
         model_options = {
-            "LSTM": "LSTMModel",
-            "GRU": "GRUModel",
-            "Transformer": "TransformerModel",
-            "CNN": "CNNModel",
-            "RNN": "RNNModel",
-            "BiLSTM": "BiLSTMModel",
+            "LSTM Classifier": "QuantLSTMClassifier",
+            "LSTM Regressor": "QuantLSTMRegressor",
+            "GRU Classifier": "QuantGRUClassifier",
+            "GRU Regressor": "QuantGRURegressor",
         }
 
         selected_model = st.selectbox(
@@ -353,8 +471,10 @@ def get_model_selection(category: str) -> Dict:
         model_options = {
             "Stacking Ensemble": "StackingEnsemble",
             "Voting Ensemble": "VotingEnsemble",
-            "Bagging Ensemble": "BaggingEnsemble",
+            "Financial Random Forest": "FinancialRandomForest",
             "Meta Labeling": "MetaLabelingModel",
+            "Transformer Classifier": "TransformerClassifier",
+            "Transformer Regressor": "TransformerRegressor",
         }
 
         selected_model = st.selectbox(
@@ -373,9 +493,9 @@ def get_model_selection(category: str) -> Dict:
             return {}
 
         model_options = {
-            "Attention Model": "AttentionModel",
+            "Attention Layer": "AttentionLayer",
             "Multi-Head Attention": "MultiHeadAttention",
-            "Self Attention": "SelfAttention",
+            "Temporal Attention": "TemporalAttention",
         }
 
         selected_model = st.selectbox(
@@ -930,9 +1050,28 @@ def get_model_instance(model_class: str, task_type: str, hyperparams: Dict):
     """Create model instance with proper error handling and Phase 3 support"""
 
     try:
-        # Traditional ML Models (Week 7)
+        # Custom Financial ML Models (Week 7)
         if TRADITIONAL_ML_AVAILABLE:
-            if (
+            # Quant Random Forest Models
+            if model_class == "QuantRandomForestClassifier":
+                return QuantRandomForestClassifier(**hyperparams)
+            elif model_class == "QuantRandomForestRegressor":
+                return QuantRandomForestRegressor(**hyperparams)
+
+            # Quant XGBoost Models
+            elif model_class == "QuantXGBoostClassifier":
+                return QuantXGBoostClassifier(**hyperparams)
+            elif model_class == "QuantXGBoostRegressor":
+                return QuantXGBoostRegressor(**hyperparams)
+
+            # Quant SVM Models
+            elif model_class == "QuantSVMClassifier":
+                return QuantSVMClassifier(**hyperparams)
+            elif model_class == "QuantSVMRegressor":
+                return QuantSVMRegressor(**hyperparams)
+
+            # Basic sklearn models for comparison
+            elif (
                 model_class == "RandomForestClassifier"
                 and task_type == "Classification"
             ):
@@ -964,7 +1103,7 @@ def get_model_instance(model_class: str, task_type: str, hyperparams: Dict):
             elif model_class == "DecisionTreeRegressor" and task_type == "Regression":
                 return DecisionTreeRegressor(**hyperparams)
 
-        # XGBoost Models
+        # XGBoost Models (both custom and standard)
         if XGBOOST_AVAILABLE:
             if model_class == "XGBClassifier" and task_type == "Classification":
                 return xgb.XGBClassifier(**hyperparams)
@@ -980,18 +1119,14 @@ def get_model_instance(model_class: str, task_type: str, hyperparams: Dict):
 
         # Deep Learning Models (Week 8)
         if DEEP_LEARNING_AVAILABLE:
-            if model_class == "LSTMModel":
-                return LSTMModel(**hyperparams)
-            elif model_class == "GRUModel":
-                return GRUModel(**hyperparams)
-            elif model_class == "TransformerModel":
-                return TransformerModel(**hyperparams)
-            elif model_class == "CNNModel":
-                return CNNModel(**hyperparams)
-            elif model_class == "RNNModel":
-                return RNNModel(**hyperparams)
-            elif model_class == "BiLSTMModel":
-                return BiLSTMModel(**hyperparams)
+            if model_class == "QuantLSTMClassifier":
+                return QuantLSTMClassifier(**hyperparams)
+            elif model_class == "QuantLSTMRegressor":
+                return QuantLSTMRegressor(**hyperparams)
+            elif model_class == "QuantGRUClassifier":
+                return QuantGRUClassifier(**hyperparams)
+            elif model_class == "QuantGRURegressor":
+                return QuantGRURegressor(**hyperparams)
 
         # Advanced Models (Week 9)
         if ADVANCED_MODELS_AVAILABLE:
@@ -999,16 +1134,20 @@ def get_model_instance(model_class: str, task_type: str, hyperparams: Dict):
                 return StackingEnsemble(**hyperparams)
             elif model_class == "VotingEnsemble":
                 return VotingEnsemble(**hyperparams)
-            elif model_class == "BaggingEnsemble":
-                return BaggingEnsemble(**hyperparams)
+            elif model_class == "FinancialRandomForest":
+                return FinancialRandomForest(**hyperparams)
             elif model_class == "MetaLabelingModel":
                 return MetaLabelingModel(**hyperparams)
-            elif model_class == "AttentionModel":
-                return AttentionModel(**hyperparams)
+            elif model_class == "TransformerClassifier":
+                return TransformerClassifier(**hyperparams)
+            elif model_class == "TransformerRegressor":
+                return TransformerRegressor(**hyperparams)
+            elif model_class == "AttentionLayer":
+                return AttentionLayer(**hyperparams)
             elif model_class == "MultiHeadAttention":
                 return MultiHeadAttention(**hyperparams)
-            elif model_class == "SelfAttention":
-                return SelfAttention(**hyperparams)
+            elif model_class == "TemporalAttention":
+                return TemporalAttention(**hyperparams)
 
         # Fallback: Return dummy model
         st.warning(f"Model class {model_class} not available. Using dummy model.")
