@@ -167,19 +167,40 @@ def display_collection_status(status_data: Dict[str, Any]) -> None:
     try:
         st.subheader("📊 Collection Status")
 
+        # Handle both old and new status data formats
+        if "symbols" in status_data:
+            # New format from DataAcquisitionManager
+            symbols = status_data.get("symbols", [])
+            total_symbols = len(symbols)
+            progress = status_data.get("progress", 0.0)
+            current_symbol = status_data.get("current_symbol", "")
+            message = status_data.get("message", "")
+            is_active = status_data.get("active", False)
+
+            # Calculate collected count based on progress
+            collected_symbols = int(total_symbols * progress)
+            failed_symbols = 0  # Would need to track this separately
+
+        else:
+            # Old format compatibility
+            total_symbols = status_data.get("total_symbols", 0)
+            collected_symbols = status_data.get("collected_symbols", 0)
+            failed_symbols = status_data.get("failed_symbols", 0)
+            progress = status_data.get("progress", 0.0)
+            current_symbol = status_data.get("current_symbol", "")
+            message = status_data.get("message", "")
+            is_active = status_data.get("active", False)
+
         # Overall status metrics
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            total_symbols = status_data.get("total_symbols", 0)
             st.metric("Total Symbols", total_symbols)
 
         with col2:
-            collected_symbols = status_data.get("collected_symbols", 0)
             st.metric("Collected", collected_symbols)
 
         with col3:
-            failed_symbols = status_data.get("failed_symbols", 0)
             st.metric(
                 "Failed", failed_symbols, delta="❌" if failed_symbols > 0 else "✅"
             )
@@ -190,11 +211,17 @@ def display_collection_status(status_data: Dict[str, Any]) -> None:
             )
             st.metric("Success Rate", f"{success_rate:.1f}%")
 
-        # Progress bar
+        # Progress bar and status
         if total_symbols > 0:
-            progress = collected_symbols / total_symbols
             st.progress(progress)
-            st.write(f"Progress: {collected_symbols}/{total_symbols} symbols completed")
+            if is_active:
+                st.write(f"⏳ {message}")
+                if current_symbol:
+                    st.write(f"Currently processing: **{current_symbol}**")
+            else:
+                st.write(
+                    f"Progress: {collected_symbols}/{total_symbols} symbols completed"
+                )
 
         # Detailed status
         if "symbol_status" in status_data:
@@ -206,19 +233,31 @@ def display_collection_status(status_data: Dict[str, Any]) -> None:
         st.error(f"Error displaying collection status: {str(e)}")
 
 
-def display_validation_results(validation_results: Dict[str, Any]) -> None:
+def display_validation_results(validation_results: Any) -> None:
     """
     Display comprehensive data validation results.
 
     Args:
-        validation_results: Dictionary containing validation results
+        validation_results: ValidationResult object or dict containing validation results
     """
     try:
         st.subheader("🔍 Data Validation Results")
 
-        # Overall validation status
-        is_valid = validation_results.get("is_valid", False)
+        # Handle both ValidationResult objects and dictionaries
+        if hasattr(validation_results, "is_valid"):
+            # ValidationResult object
+            is_valid = validation_results.is_valid
+            errors = validation_results.errors
+            warnings = validation_results.warnings
+            statistics = validation_results.statistics
+        else:
+            # Dictionary format (fallback)
+            is_valid = validation_results.get("is_valid", False)
+            errors = validation_results.get("errors", [])
+            warnings = validation_results.get("warnings", [])
+            statistics = validation_results.get("statistics", {})
 
+        # Overall validation status
         if is_valid:
             st.success("✅ All data passed validation")
         else:
@@ -228,23 +267,22 @@ def display_validation_results(validation_results: Dict[str, Any]) -> None:
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            error_count = len(validation_results.get("errors", []))
+            error_count = len(errors)
             st.metric("Errors", error_count, delta="❌" if error_count > 0 else "✅")
 
         with col2:
-            warning_count = len(validation_results.get("warnings", []))
+            warning_count = len(warnings)
             st.metric(
                 "Warnings", warning_count, delta="⚠️" if warning_count > 0 else "✅"
             )
 
         with col3:
-            data_quality = validation_results.get("quality_score", 0.0)
-            st.metric("Quality Score", f"{data_quality:.2f}")
+            # Calculate quality score based on errors and warnings
+            total_issues = error_count + warning_count
+            quality_score = max(0.0, 1.0 - (total_issues * 0.1))
+            st.metric("Quality Score", f"{quality_score:.2f}")
 
         # Detailed validation results
-        errors = validation_results.get("errors", [])
-        warnings = validation_results.get("warnings", [])
-        statistics = validation_results.get("statistics", {})
 
         # Errors
         if errors:
@@ -330,14 +368,18 @@ def display_storage_management() -> None:
             st.write("**Cached Data:**")
             cache_info = []
             for symbol, data_info in st.session_state.data_cache.items():
+                # Handle both old and new data structure formats
+                collected_at = data_info.get(
+                    "collected_at",
+                    data_info.get("metadata", {}).get("collected_at", datetime.now()),
+                )
+
                 cache_info.append(
                     {
                         "Symbol": symbol,
                         "Records": len(data_info["data"]),
                         "Columns": len(data_info["data"].columns),
-                        "Last Updated": data_info["metadata"]["collected_at"].strftime(
-                            "%Y-%m-%d %H:%M"
-                        ),
+                        "Last Updated": collected_at.strftime("%Y-%m-%d %H:%M"),
                     }
                 )
 

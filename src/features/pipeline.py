@@ -295,47 +295,136 @@ class FeaturePipeline:
         advanced_results: AdvancedFeatureResults,
     ) -> pd.DataFrame:
         """Combine all generated features into a single DataFrame."""
+        print(f"DEBUG: Starting _combine_features with data dtypes: {data.dtypes}")
         feature_dfs = []
 
         # Add basic price features
         if "close" in data.columns:
-            price_features = pd.DataFrame(index=data.index)
-            price_features["returns"] = data["close"].pct_change()
-            price_features["log_returns"] = np.log(data["close"]).diff()
+            close_col = "close"
+        elif "Close" in data.columns:
+            close_col = "Close"
+        else:
+            close_col = None
 
-            # Price-based features
-            for window in [5, 10, 20]:
-                price_features[f"price_momentum_{window}"] = data["close"].pct_change(
-                    window
-                )
-                price_features[f"volatility_{window}"] = (
-                    price_features["returns"].rolling(window).std()
+        if close_col is not None:
+            try:
+                price_features = pd.DataFrame(index=data.index)
+
+                # Ensure close price is numeric with explicit conversion
+                close_series = data[close_col]
+                print(f"DEBUG: Original close_series dtype: {close_series.dtype}")
+
+                # Force numeric conversion
+                close_series = pd.to_numeric(close_series, errors="coerce")
+                print(f"DEBUG: Converted close_series dtype: {close_series.dtype}")
+
+                # Calculate returns with explicit numeric operations
+                price_features["returns"] = close_series.pct_change()
+                price_features["log_returns"] = np.log(close_series).diff()
+
+                # Price-based features with explicit conversion
+                for window in [5, 10, 20]:
+                    momentum = close_series.pct_change(window)
+                    volatility = price_features["returns"].rolling(window).std()
+
+                    price_features[f"price_momentum_{window}"] = pd.to_numeric(
+                        momentum, errors="coerce"
+                    )
+                    price_features[f"volatility_{window}"] = pd.to_numeric(
+                        volatility, errors="coerce"
+                    )
+
+                # Final check on price features
+                for col in price_features.columns:
+                    if not pd.api.types.is_numeric_dtype(price_features[col]):
+                        print(
+                            f"DEBUG: Non-numeric price feature {col}: {price_features[col].dtype}"
+                        )
+                        price_features[col] = pd.to_numeric(
+                            price_features[col], errors="coerce"
+                        )
+
+                feature_dfs.append(price_features)
+                print(
+                    f"DEBUG: Added price features with dtypes: {price_features.dtypes}"
                 )
 
-            feature_dfs.append(price_features)
+            except Exception as e:
+                print(f"DEBUG: Error in price features: {e}")
 
         # Add technical indicators
-        tech_features = self._extract_technical_features(technical_results, data.index)
-        if not tech_features.empty:
-            feature_dfs.append(tech_features)
+        try:
+            tech_features = self._extract_technical_features(
+                technical_results, data.index
+            )
+            if not tech_features.empty:
+                feature_dfs.append(tech_features)
+                print(
+                    f"DEBUG: Added technical features with dtypes: {tech_features.dtypes}"
+                )
+        except Exception as e:
+            print(f"DEBUG: Error in technical features: {e}")
 
         # Add advanced features
-        adv_features = self._extract_advanced_features(advanced_results, data.index)
-        if not adv_features.empty:
-            feature_dfs.append(adv_features)
+        try:
+            adv_features = self._extract_advanced_features(advanced_results, data.index)
+            if not adv_features.empty:
+                feature_dfs.append(adv_features)
+                print(
+                    f"DEBUG: Added advanced features with dtypes: {adv_features.dtypes}"
+                )
+        except Exception as e:
+            print(f"DEBUG: Error in advanced features: {e}")
 
         # Combine all features
         if feature_dfs:
-            combined_features = pd.concat(feature_dfs, axis=1)
+            try:
+                combined_features = pd.concat(feature_dfs, axis=1)
+                print(
+                    f"DEBUG: Combined features dtypes before cleanup: {combined_features.dtypes}"
+                )
 
-            # Remove features with too many NaN values
-            missing_threshold = self.config.validation.get("missing_threshold", 0.05)
-            combined_features = combined_features.loc[
-                :, combined_features.isnull().mean() < missing_threshold
-            ]
+                # Ensure all columns are numeric - more aggressive approach
+                for col in combined_features.columns:
+                    original_dtype = combined_features[col].dtype
+                    if not pd.api.types.is_numeric_dtype(combined_features[col]):
+                        print(
+                            f"DEBUG: Converting non-numeric column {col} from {original_dtype}"
+                        )
+                        combined_features[col] = pd.to_numeric(
+                            combined_features[col], errors="coerce"
+                        )
+                    else:
+                        # Even if it's numeric, ensure it's float64
+                        combined_features[col] = combined_features[col].astype(
+                            "float64", errors="ignore"
+                        )
 
-            return combined_features
+                print(
+                    f"DEBUG: Final combined features dtypes: {combined_features.dtypes}"
+                )
+
+                # Remove features with too many NaN values
+                missing_threshold = self.config.validation.get(
+                    "missing_threshold", 0.05
+                )
+                before_shape = combined_features.shape
+                combined_features = combined_features.loc[
+                    :, combined_features.isnull().mean() < missing_threshold
+                ]
+                print(
+                    f"DEBUG: Shape after removing high-NaN features: {before_shape} -> {combined_features.shape}"
+                )
+
+                return combined_features
+            except Exception as e:
+                print(f"DEBUG: Error in combining features: {e}")
+                import traceback
+
+                print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+                return pd.DataFrame(index=data.index)
         else:
+            print("DEBUG: No features to combine")
             return pd.DataFrame(index=data.index)
 
     def _extract_technical_features(
@@ -353,10 +442,14 @@ class FeaturePipeline:
 
             # Handle different types of indicator results
             if isinstance(values, pd.Series):
-                features[indicator_key] = values
+                # Ensure values are numeric
+                numeric_values = pd.to_numeric(values, errors="coerce")
+                features[indicator_key] = numeric_values
             elif isinstance(values, pd.DataFrame):
                 if len(values.columns) == 1:
-                    features[indicator_key] = values.iloc[:, 0]
+                    # Single column DataFrame
+                    numeric_values = pd.to_numeric(values.iloc[:, 0], errors="coerce")
+                    features[indicator_key] = numeric_values
                 else:
                     # Multi-column indicators (like MACD, Bollinger Bands)
                     for col in values.columns:
@@ -365,7 +458,9 @@ class FeaturePipeline:
                             if col not in indicator_key
                             else indicator_key
                         )
-                        features[feature_name] = values[col]
+                        # Ensure values are numeric
+                        numeric_values = pd.to_numeric(values[col], errors="coerce")
+                        features[feature_name] = numeric_values
 
         return features
 
@@ -376,13 +471,21 @@ class FeaturePipeline:
         features = pd.DataFrame(index=index)
 
         if adv_results.fractal_dimension is not None:
-            features["fractal_dimension"] = adv_results.fractal_dimension
+            # Ensure numeric conversion
+            numeric_values = pd.to_numeric(
+                adv_results.fractal_dimension, errors="coerce"
+            )
+            features["fractal_dimension"] = numeric_values
 
         if adv_results.hurst_exponent is not None:
-            features["hurst_exponent"] = adv_results.hurst_exponent
+            # Ensure numeric conversion
+            numeric_values = pd.to_numeric(adv_results.hurst_exponent, errors="coerce")
+            features["hurst_exponent"] = numeric_values
 
         if adv_results.fractional_diff is not None:
-            features["fractional_diff"] = adv_results.fractional_diff
+            # Ensure numeric conversion
+            numeric_values = pd.to_numeric(adv_results.fractional_diff, errors="coerce")
+            features["fractional_diff"] = numeric_values
 
         return features
 
@@ -669,8 +772,24 @@ class FeaturePipeline:
         """Generate cache key based on data characteristics."""
         import hashlib
 
-        # Create a hash based on data shape, column names, and first/last values
-        key_data = f"{data.shape}_{list(data.columns)}_{data.iloc[0].sum()}_{data.iloc[-1].sum()}"
+        # Use only numeric columns for cache key to avoid dtype issues
+        numeric_cols = data.select_dtypes(include=[np.number])
+
+        try:
+            # Create a hash based on data shape, numeric column names, and first/last numeric values
+            key_data = f"{data.shape}_{list(numeric_cols.columns)}_{len(data)}"
+
+            # Add first and last row sums for numeric columns only
+            if len(numeric_cols) > 0 and len(numeric_cols) > 0:
+                first_sum = numeric_cols.iloc[0].sum()
+                last_sum = numeric_cols.iloc[-1].sum()
+                key_data += f"_{first_sum}_{last_sum}"
+
+        except Exception as e:
+            # Fallback to basic key if there are issues
+            print(f"DEBUG: Cache key generation error: {e}")
+            key_data = f"{data.shape}_{len(data.columns)}_{len(data)}"
+
         return hashlib.md5(key_data.encode()).hexdigest()
 
     def _get_from_cache(self, cache_key: str) -> Optional[FeaturePipelineResults]:

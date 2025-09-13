@@ -335,10 +335,8 @@ class DataAcquisitionManager:
                 if symbol in session_state["data_cache"]:
                     data = session_state["data_cache"][symbol]["data"]
 
-                    # Run validation
-                    result = self.validator.validate_data(
-                        data=data, level=level, generate_report=report
-                    )
+                    # Run validation using the correct method
+                    result = self.validator.validate_ohlcv_data(data)
 
                     validation_results[symbol] = result
 
@@ -348,7 +346,7 @@ class DataAcquisitionManager:
             # Calculate summary
             total_validated = len(validation_results)
             passed_validation = sum(
-                1 for r in validation_results.values() if r.overall_quality == "PASS"
+                1 for r in validation_results.values() if r.is_valid
             )
 
             return (

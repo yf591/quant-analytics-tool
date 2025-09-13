@@ -20,12 +20,9 @@ sys.path.append(str(project_root))
 sys.path.append(str(streamlit_root))
 
 try:
-    # Week 4-5: Feature Engineering Framework Integration
-    from src.features.technical import TechnicalIndicators
-    from src.features.advanced import AdvancedFeatures
-    from src.features.pipeline import FeaturePipeline
-    from src.features.importance import FeatureImportance
-    from src.config import settings
+    # Week 14: Streamlit utils integration - use utility managers
+    from utils.feature_utils import FeatureEngineeringManager
+    from utils.analysis_utils import AnalysisManager
 
     # Streamlit components
     from components.charts import (
@@ -39,7 +36,6 @@ try:
         display_data_metrics,
         display_feature_table,
         display_feature_quality_metrics,
-        display_computation_status,
     )
     from components.forms import (
         create_data_selection_form,
@@ -54,15 +50,21 @@ except ImportError as e:
 def main():
     """Professional Feature Engineering Interface"""
 
+    # Initialize managers
+    feature_manager = FeatureEngineeringManager()
+    analysis_manager = AnalysisManager()
+
+    # Initialize session state using the managers
+    feature_manager.initialize_session_state(st.session_state)
+    analysis_manager.initialize_session_state(st.session_state)
+
     st.title("🛠️ Feature Engineering")
     st.markdown("**Professional Financial Feature Generation Platform**")
     st.markdown("---")
 
-    # Initialize session state
-    if "feature_cache" not in st.session_state:
-        st.session_state.feature_cache = {}
-    if "feature_pipeline_cache" not in st.session_state:
-        st.session_state.feature_pipeline_cache = {}
+    # Store managers in session state for access in other functions
+    st.session_state.feature_manager = feature_manager
+    st.session_state.analysis_manager = analysis_manager
 
     # Check for available data
     if "data_cache" not in st.session_state or not st.session_state.data_cache:
@@ -92,12 +94,13 @@ def main():
     st.header("🔧 Feature Engineering Workflow")
 
     # Create tabs for different feature engineering approaches
-    tab1, tab2, tab3, tab4 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
         [
             "🔧 Technical Indicators",
             "🧠 Advanced Features",
             "⚡ Feature Pipeline",
             "📊 Feature Analysis",
+            "📈 Statistical Analysis",
         ]
     )
 
@@ -112,6 +115,9 @@ def main():
 
     with tab4:
         feature_analysis_workflow(selected_ticker)
+
+    with tab5:
+        statistical_analysis_workflow(selected_ticker, data)
 
 
 def technical_indicators_workflow(ticker: str, data: pd.DataFrame):
@@ -245,519 +251,475 @@ def feature_analysis_workflow(ticker: str):
 def calculate_technical_indicators(
     ticker: str, data: pd.DataFrame, config: Dict[str, Any]
 ):
-    """Calculate technical indicators using Week 4 TechnicalIndicators"""
+    """Calculate technical indicators using FeatureEngineeringManager"""
 
     try:
-        display_computation_status("🔄 Calculating technical indicators...", 0.1)
+        # Get the feature manager from session state
+        feature_manager = st.session_state.feature_manager
 
-        # Validate and normalize data columns
-        required_columns = ["Open", "High", "Low", "Close", "Volume"]
-        missing_columns = []
-
-        # Check for standard column names and their lowercase variants
-        column_mapping = {}
-        for col in required_columns:
-            if col in data.columns:
-                column_mapping[col] = col
-            elif col.lower() in data.columns:
-                column_mapping[col] = col.lower()
-            else:
-                missing_columns.append(col)
-
-        if missing_columns:
-            st.error(f"❌ Missing required columns: {missing_columns}")
-            st.info(f"Available columns: {list(data.columns)}")
-            return
-
-        # Create normalized data with standard column names
-        normalized_data = pd.DataFrame(index=data.index)
-        for standard_col, actual_col in column_mapping.items():
-            normalized_data[standard_col] = data[actual_col]
-
-        # Remove any rows with NaN values in required columns
-        before_clean = len(normalized_data)
-        normalized_data = normalized_data.dropna()
-        after_clean = len(normalized_data)
-
-        if after_clean < before_clean:
-            st.info(f"📊 Removed {before_clean - after_clean} rows with missing values")
-
-        if len(normalized_data) < 50:
-            st.warning(
-                "⚠️ Insufficient data for technical analysis (need at least 50 data points)"
+        # Use the manager to calculate technical indicators
+        with st.spinner("Calculating technical indicators..."):
+            success, message = feature_manager.calculate_technical_indicators(
+                ticker, data, config, st.session_state
             )
-            return
 
-        display_computation_status("🔄 Initializing technical indicators...", 0.2)
-
-        # Use existing Week 4 module
-        ti = TechnicalIndicators()
-
-        # Build indicator list based on config
-        indicators_to_calculate = []
-
-        if config.get("sma_enabled", False):
-            indicators_to_calculate.append("sma")
-        if config.get("ema_enabled", False):
-            indicators_to_calculate.append("ema")
-        if config.get("rsi_enabled", False):
-            indicators_to_calculate.append("rsi")
-        if config.get("macd_enabled", False):
-            indicators_to_calculate.append("macd")
-        if config.get("bb_enabled", False):
-            indicators_to_calculate.append("bollinger_bands")
-        if config.get("atr_enabled", False):
-            indicators_to_calculate.append("atr")
-        if config.get("stoch_enabled", False):
-            indicators_to_calculate.append("stochastic")
-        if config.get("williams_enabled", False):
-            indicators_to_calculate.append("williams_r")
-        if config.get("momentum_enabled", False):
-            indicators_to_calculate.append("momentum")
-
-        if not indicators_to_calculate:
-            st.warning(
-                "⚠️ No indicators selected. Please enable at least one indicator."
-            )
-            return
-
-        display_computation_status("🔄 Computing indicators...", 0.5)
-
-        # Calculate all enabled indicators
-        # Note: TechnicalIndicators expects lowercase column names
-        lowercase_data = normalized_data.copy()
-        lowercase_data.columns = [col.lower() for col in lowercase_data.columns]
-
-        all_results = ti.calculate_all_indicators(
-            lowercase_data, indicators_to_calculate
-        )
-
-        display_computation_status("🔄 Processing results...", 0.8)
-
-        # ★★★ 重要な修正点：データ形式を分離 ★★★
-
-        # 1. チャート関数に渡す用の辞書を作成（元の構造を維持）
-        features_for_chart = {}
-        for name, result_obj in all_results.items():
-            if hasattr(result_obj, "values"):
-                features_for_chart[name] = result_obj.values
-
-        # 2. テーブル表示と後続処理用のDataFrameを作成（全カラムを展開）
-        feature_df_for_table = pd.DataFrame(index=normalized_data.index)
-        for name, values in features_for_chart.items():
-            if isinstance(values, pd.DataFrame):
-                # 複数カラムを持つ指標（MACD、Bollinger Bands、Stochastic等）
-                for col in values.columns:
-                    # 分かりやすい名前にする
-                    if name == "bollinger_bands":
-                        new_name = f"BB_{col}"
-                    elif name == "stochastic":
-                        new_name = f"Stoch_{col}"
-                    else:
-                        new_name = f"{name}_{col}"
-                    feature_df_for_table[new_name] = values[col]
-            elif isinstance(values, pd.Series):
-                # 単一カラムの指標（SMA、EMA、RSI等）
-                feature_df_for_table[name] = values
-
-        if feature_df_for_table.empty:
-            st.warning("⚠️ No technical indicators were calculated successfully.")
-            st.info(f"📊 Requested indicators: {indicators_to_calculate}")
-            return
-
-        # 3. セッションステートに保存
-        feature_key = f"{ticker}_technical"
-
-        # テーブル表示やモデル学習用には、展開されたDataFrameを保存
-        st.session_state.feature_cache[feature_key] = feature_df_for_table
-
-        # メタデータには、チャート描画用の元の構造を保った辞書を保存
-        st.session_state.feature_cache[f"{feature_key}_metadata"] = {
-            "original_data": normalized_data,
-            "features_dict_for_chart": features_for_chart,  # ★新しいキーで保存
-            "type": "technical",
-            "config": config,
-            "calculated_at": datetime.now(),
-            "indicators_count": len(features_for_chart),
-        }
-
-        display_computation_status(
-            f"✅ Successfully calculated {len(features_for_chart)} technical indicators for {ticker}",
-            1.0,
-        )
-        st.rerun()
+        if success:
+            st.success(message)
+            st.rerun()
+        else:
+            st.error(message)
 
     except Exception as e:
-        display_computation_status(
-            f"❌ Technical indicator calculation failed: {str(e)}", details=str(e)
-        )
+        error_msg = f"Technical indicator calculation failed: {str(e)}"
+        st.error(error_msg)
 
 
 def calculate_advanced_features(
     ticker: str, data: pd.DataFrame, config: Dict[str, Any]
 ):
-    """Calculate advanced features using Week 5 AdvancedFeatures"""
+    """Calculate advanced features using FeatureEngineeringManager"""
 
     try:
-        display_computation_status("🔄 Calculating advanced features...", 0.1)
+        # Get the feature manager from session state
+        feature_manager = st.session_state.feature_manager
 
-        # Validate and normalize data columns
-        price_col = None
-        volume_col = None
+        # Use the manager to calculate advanced features
+        with st.spinner("Calculating advanced features..."):
+            success, message = feature_manager.calculate_advanced_features(
+                ticker, data, config, st.session_state
+            )
 
-        # Check for price column (Close or close)
-        if "Close" in data.columns:
-            price_col = "Close"
-        elif "close" in data.columns:
-            price_col = "close"
+        if success:
+            st.success(message)
+            st.rerun()
         else:
-            st.error("❌ No price column found (Close or close)")
-            st.info(f"Available columns: {list(data.columns)}")
-            return
-
-        # Check for volume column (Volume or volume)
-        if "Volume" in data.columns:
-            volume_col = "Volume"
-        elif "volume" in data.columns:
-            volume_col = "volume"
-
-        # Clean data for analysis
-        clean_data = data.dropna(subset=[price_col])
-        if len(clean_data) < len(data):
-            st.info(
-                f"📊 Removed {len(data) - len(clean_data)} rows with missing price data"
-            )
-
-        if len(clean_data) < 100:
-            st.warning(
-                "⚠️ Insufficient data for advanced features (need at least 100 data points)"
-            )
-            return
-
-        # Use existing Week 5 module
-        af = AdvancedFeatures()
-        results = {}
-
-        display_computation_status("🔄 Computing features...", 0.3)
-
-        # Calculate enabled features
-        if config.get("fractal_enabled", False):
-            display_computation_status("🔄 Computing fractal dimension...", 0.4)
-            try:
-                results["fractal_dimension"] = af.calculate_fractal_dimension(
-                    clean_data[price_col],
-                    config.get("fractal_window", 100),
-                    config.get("fractal_method", "higuchi"),
-                )
-            except Exception as e:
-                st.warning(f"⚠️ Fractal dimension calculation failed: {str(e)}")
-
-        if config.get("hurst_enabled", False):
-            display_computation_status("🔄 Computing Hurst exponent...", 0.6)
-            try:
-                results["hurst_exponent"] = af.calculate_hurst_exponent(
-                    clean_data[price_col],
-                    config.get("hurst_window", 100),
-                    config.get("hurst_method", "rs"),
-                )
-            except Exception as e:
-                st.warning(f"⚠️ Hurst exponent calculation failed: {str(e)}")
-
-        if config.get("info_bars_enabled", False) and volume_col:
-            display_computation_status("🔄 Creating information bars...", 0.7)
-            try:
-                threshold = config.get("bar_threshold", None)
-                if threshold == 0:
-                    threshold = None
-                results["information_bars"] = af.create_information_bars(
-                    clean_data,
-                    config.get("bar_type", "volume"),
-                    threshold,
-                    price_col,
-                    volume_col,
-                )
-            except Exception as e:
-                st.warning(f"⚠️ Information bars calculation failed: {str(e)}")
-
-        if config.get("frac_diff_enabled", False):
-            display_computation_status(
-                "🔄 Computing fractional differentiation...", 0.8
-            )
-            try:
-                results["fractional_diff"] = af.fractional_differentiation(
-                    clean_data[price_col],
-                    config.get("frac_diff_d", 0.4),
-                    config.get("frac_diff_threshold", 0.01),
-                )
-            except Exception as e:
-                st.warning(f"⚠️ Fractional differentiation calculation failed: {str(e)}")
-
-        if not results:
-            st.warning(
-                "⚠️ No advanced features calculated successfully. Please check your data and try again."
-            )
-            return
-
-        # Store results with additional metadata
-        feature_key = f"{ticker}_advanced"
-
-        # Convert features dict to DataFrame for Model Training compatibility
-        feature_df = pd.DataFrame(index=clean_data.index)
-        for name, values in results.items():
-            if isinstance(values, pd.Series):
-                feature_df[name] = values
-            else:
-                # Convert other types to Series if possible
-                try:
-                    feature_df[name] = pd.Series(values, index=clean_data.index)
-                except:
-                    st.warning(f"Could not convert {name} to Series, skipping")
-
-        # Store DataFrame instead of dict for Model Training compatibility
-        st.session_state.feature_cache[feature_key] = feature_df
-
-        # Also store metadata separately if needed
-        st.session_state.feature_cache[f"{feature_key}_metadata"] = {
-            "original_data": clean_data,
-            "features_dict": results,
-            "type": "advanced",
-            "config": config,
-            "calculated_at": datetime.now(),
-            "features_count": len(results),
-        }
-
-        display_computation_status(
-            f"✅ Successfully calculated {len(results)} advanced features for {ticker}",
-            1.0,
-        )
-        st.rerun()
+            st.error(message)
 
     except Exception as e:
-        display_computation_status(
-            f"❌ Advanced feature calculation failed: {str(e)}", details=str(e)
-        )
+        error_msg = f"Advanced feature calculation failed: {str(e)}"
+        st.error(error_msg)
 
 
 def run_feature_pipeline(ticker: str, data: pd.DataFrame, config: Dict[str, Any]):
-    """Run comprehensive feature pipeline"""
+    """Run comprehensive feature pipeline using FeatureEngineeringManager"""
 
     try:
-        display_computation_status("🔄 Initializing feature pipeline...", 0.1)
+        # Get the feature manager from session state
+        feature_manager = st.session_state.feature_manager
 
-        # Validate and normalize data
-        required_columns = ["Open", "High", "Low", "Close", "Volume"]
-
-        # Create column mapping for case-insensitive matching
-        column_mapping = {}
-        for col in required_columns:
-            if col in data.columns:
-                column_mapping[col] = col
-            elif col.lower() in data.columns:
-                column_mapping[col] = col.lower()
-
-        # Create normalized data with standard column names
-        normalized_data = pd.DataFrame(index=data.index)
-        for standard_col, actual_col in column_mapping.items():
-            if actual_col in data.columns:
-                # Ensure numeric data types
-                try:
-                    normalized_data[standard_col] = pd.to_numeric(
-                        data[actual_col], errors="coerce"
-                    )
-                except Exception:
-                    normalized_data[standard_col] = data[actual_col]
-
-        # Check if we have minimum required data
-        if "Close" not in normalized_data.columns:
-            st.error("❌ Price data (Close) is required for feature pipeline")
-            return
-
-        display_computation_status("🔄 Generating features...", 0.3)
-
-        # Initialize feature pipeline with simplified configuration
-        # Note: Since FeaturePipeline may have complex configuration requirements,
-        # we'll create features manually based on the config
-
-        all_features = pd.DataFrame(index=normalized_data.index)
-        feature_metadata = {}
-
-        # Add basic price features
-        try:
-            all_features["Price"] = normalized_data["Close"]
-            all_features["Returns"] = normalized_data["Close"].pct_change()
-            all_features["Log_Returns"] = np.log(
-                normalized_data["Close"] / normalized_data["Close"].shift(1)
-            )
-            feature_metadata["basic_features"] = ["Price", "Returns", "Log_Returns"]
-        except Exception as e:
-            st.warning(f"⚠️ Basic features calculation failed: {str(e)}")
-
-        # Add technical indicators if enabled
-        if config.get("include_technical", True):
-            display_computation_status("🔄 Adding technical indicators...", 0.5)
-            try:
-                from src.features.technical import (
-                    calculate_sma,
-                    calculate_ema,
-                    calculate_rsi,
-                )
-
-                # Simple moving averages
-                all_features["SMA_10"] = calculate_sma(normalized_data["Close"], 10)
-                all_features["SMA_20"] = calculate_sma(normalized_data["Close"], 20)
-
-                # Exponential moving averages
-                all_features["EMA_10"] = calculate_ema(normalized_data["Close"], 10)
-                all_features["EMA_20"] = calculate_ema(normalized_data["Close"], 20)
-
-                # RSI
-                all_features["RSI"] = calculate_rsi(normalized_data["Close"], 14)
-
-                feature_metadata["technical_indicators"] = [
-                    "SMA_10",
-                    "SMA_20",
-                    "EMA_10",
-                    "EMA_20",
-                    "RSI",
-                ]
-
-            except Exception as e:
-                st.warning(f"⚠️ Technical indicators calculation failed: {str(e)}")
-
-        # Add advanced features if enabled
-        if config.get("include_advanced", True):
-            display_computation_status("🔄 Adding advanced features...", 0.7)
-            try:
-                # Rolling volatility
-                all_features["Volatility_20"] = (
-                    normalized_data["Close"].rolling(20).std()
-                )
-
-                # Price momentum
-                all_features["Momentum_5"] = normalized_data["Close"] - normalized_data[
-                    "Close"
-                ].shift(5)
-                all_features["Momentum_10"] = normalized_data[
-                    "Close"
-                ] - normalized_data["Close"].shift(10)
-
-                feature_metadata["advanced_features"] = [
-                    "Volatility_20",
-                    "Momentum_5",
-                    "Momentum_10",
-                ]
-
-            except Exception as e:
-                st.warning(f"⚠️ Advanced features calculation failed: {str(e)}")
-
-        display_computation_status("🔄 Processing pipeline results...", 0.8)
-
-        # Remove features with all NaN values
-        all_features = all_features.dropna(axis=1, how="all")
-
-        # Ensure all features are numeric for Arrow compatibility
-        for col in all_features.columns:
-            if all_features[col].dtype == "object":
-                try:
-                    all_features[col] = pd.to_numeric(
-                        all_features[col], errors="coerce"
-                    )
-                except:
-                    # If conversion fails, this column will be dropped
-                    all_features = all_features.drop(columns=[col])
-                    st.warning(f"⚠️ Dropped non-numeric feature: {col}")
-
-        # Remove any remaining rows with NaN values to ensure clean data
-        all_features = all_features.dropna()
-
-        if len(all_features) == 0:
-            st.error("❌ No valid feature data remaining after cleaning")
-            return
-
-        # Feature selection if enabled
-        if config.get("feature_selection", True) and len(
-            all_features.columns
-        ) > config.get("max_features", 50):
-            display_computation_status("🔄 Performing feature selection...", 0.9)
-
-            # Simple correlation-based feature selection
-            correlation_threshold = config.get("correlation_threshold", 0.8)
-            correlation_matrix = all_features.corr().abs()
-
-            # Find highly correlated features
-            upper_triangle = correlation_matrix.where(
-                np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool)
+        # Use the manager to run feature pipeline
+        with st.spinner("Running feature pipeline..."):
+            success, message = feature_manager.run_feature_pipeline(
+                ticker, data, config, st.session_state
             )
 
-            # Select features to drop
-            to_drop = [
-                column
-                for column in upper_triangle.columns
-                if any(upper_triangle[column] > correlation_threshold)
-            ]
-
-            if to_drop:
-                all_features = all_features.drop(columns=to_drop)
-                st.info(f"🔄 Removed {len(to_drop)} highly correlated features")
-
-        # Create simplified pipeline results
-        from dataclasses import dataclass
-
-        @dataclass
-        class SimplePipelineResults:
-            features: pd.DataFrame = None
-            feature_names: List[str] = None
-            quality_metrics: Dict[str, Any] = None
-            feature_importance: Optional[pd.Series] = None
-
-        # Calculate quality metrics
-        quality_metrics = {
-            "total_features": len(all_features.columns),
-            "completeness": (1 - all_features.isnull().mean().mean()),
-            "correlation_threshold": config.get("correlation_threshold", 0.8),
-            "feature_metadata": feature_metadata,
-        }
-
-        pipeline_results = SimplePipelineResults(
-            features=all_features,
-            feature_names=list(all_features.columns),
-            quality_metrics=quality_metrics,
-            feature_importance=None,  # Initialize as None for now
-        )
-
-        # Store pipeline results
-        pipeline_key = f"{ticker}_pipeline"
-
-        # Store the features DataFrame directly in feature_cache for Model Training compatibility
-        st.session_state.feature_cache[pipeline_key] = all_features
-
-        # Store metadata separately
-        st.session_state.feature_cache[f"{pipeline_key}_metadata"] = {
-            "original_data": normalized_data,
-            "type": "pipeline",
-            "config": config,
-            "calculated_at": datetime.now(),
-            "feature_metadata": feature_metadata,
-        }
-
-        # Also store in feature_pipeline_cache for pipeline-specific functionality
-        st.session_state.feature_pipeline_cache[pipeline_key] = {
-            "data": normalized_data,
-            "results": pipeline_results,
-            "config": config,
-            "calculated_at": datetime.now(),
-        }
-
-        display_computation_status(
-            f"✅ Feature pipeline completed successfully for {ticker} ({len(all_features.columns)} features)",
-            1.0,
-        )
-        st.rerun()
+        if success:
+            st.success(message)
+            st.rerun()
+        else:
+            st.error(message)
 
     except Exception as e:
-        display_computation_status(
-            f"❌ Feature pipeline failed: {str(e)}", details=str(e)
+        error_msg = f"Feature pipeline failed: {str(e)}"
+        st.error(error_msg)
+
+
+def statistical_analysis_workflow(ticker: str, data: pd.DataFrame):
+    """Statistical Analysis Workflow - NEW: Week 14 Integration"""
+
+    st.subheader("📈 Statistical Analysis & Quality Assessment")
+    st.markdown(
+        "Perform comprehensive statistical analysis on data and features using AFML methodologies."
+    )
+
+    # Analysis type selection
+    analysis_type = st.selectbox(
+        "Analysis Type",
+        options=[
+            "Raw Data Analysis",
+            "Feature Quality Analysis",
+            "Return Analysis",
+            "Volatility Analysis",
+        ],
+        help="Choose the type of statistical analysis to perform",
+    )
+
+    if analysis_type == "Raw Data Analysis":
+        raw_data_analysis_workflow(ticker, data)
+    elif analysis_type == "Feature Quality Analysis":
+        feature_quality_analysis_workflow(ticker)
+    elif analysis_type == "Return Analysis":
+        return_analysis_workflow(ticker, data)
+    elif analysis_type == "Volatility Analysis":
+        volatility_analysis_workflow(ticker, data)
+
+
+def raw_data_analysis_workflow(ticker: str, data: pd.DataFrame):
+    """Raw data statistical analysis"""
+
+    st.subheader("📊 Raw Data Statistical Analysis")
+
+    # Select column for analysis
+    numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+    if not numeric_columns:
+        st.warning("No numeric columns found for analysis")
+        return
+
+    selected_column = st.selectbox(
+        "Select Column for Analysis",
+        options=numeric_columns,
+        index=0 if "Close" in numeric_columns else 0,
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📊 Basic Statistics", type="primary", use_container_width=True):
+            analyze_basic_statistics(ticker, data[selected_column], "price")
+
+    with col2:
+        if st.button("📈 Distribution Analysis", use_container_width=True):
+            analyze_distribution(ticker, data[selected_column], "price")
+
+    # Display results if available
+    display_analysis_results(ticker, "price", ["statistics", "distribution"])
+
+
+def feature_quality_analysis_workflow(ticker: str):
+    """Feature quality analysis workflow"""
+
+    st.subheader("🔍 Feature Quality Analysis")
+
+    # Get available features
+    available_features = [
+        key
+        for key in st.session_state.feature_cache.keys()
+        if ticker in key and not key.endswith("_metadata")
+    ]
+
+    if not available_features:
+        st.info("🔧 Calculate features first to enable quality analysis")
+        return
+
+    selected_feature_set = st.selectbox(
+        "Select Feature Set", options=available_features
+    )
+
+    if st.button(
+        "🔍 Analyze Feature Quality", type="primary", use_container_width=True
+    ):
+        feature_data = st.session_state.feature_cache[selected_feature_set]
+        if isinstance(feature_data, pd.DataFrame):
+            analyze_feature_quality(ticker, feature_data)
+
+    # Display results
+    display_analysis_results(
+        ticker, "features", ["statistics", "distribution", "correlation", "quality"]
+    )
+
+
+def return_analysis_workflow(ticker: str, data: pd.DataFrame):
+    """Return analysis workflow"""
+
+    st.subheader("📈 Return Analysis")
+
+    # Select price column
+    price_columns = [
+        col for col in data.columns if "close" in col.lower() or "price" in col.lower()
+    ]
+    if not price_columns:
+        price_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+
+    if not price_columns:
+        st.warning("No suitable price columns found")
+        return
+
+    selected_price_col = st.selectbox("Select Price Column", options=price_columns)
+    return_type = st.selectbox("Return Type", options=["simple", "log"], index=0)
+
+    if st.button("📈 Analyze Returns", type="primary", use_container_width=True):
+        analyze_returns(ticker, data[selected_price_col], return_type)
+
+    # Display results
+    display_analysis_results(ticker, "returns", ["returns_analysis"])
+
+
+def volatility_analysis_workflow(ticker: str, data: pd.DataFrame):
+    """Volatility analysis workflow"""
+
+    st.subheader("📊 Volatility Analysis")
+
+    # Select price column
+    price_columns = [
+        col for col in data.columns if "close" in col.lower() or "price" in col.lower()
+    ]
+    if not price_columns:
+        price_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+
+    if not price_columns:
+        st.warning("No suitable price columns found")
+        return
+
+    selected_price_col = st.selectbox("Select Price Column", options=price_columns)
+
+    # Check for OHLC data
+    has_ohlc = all(col in data.columns for col in ["Open", "High", "Low", "Close"])
+    include_ohlc = False
+    if has_ohlc:
+        include_ohlc = st.checkbox("Include OHLC-based volatility measures", value=True)
+
+    if st.button("📊 Analyze Volatility", type="primary", use_container_width=True):
+        ohlc_data = data[["Open", "High", "Low", "Close"]] if include_ohlc else None
+        analyze_volatility(ticker, data[selected_price_col], ohlc_data)
+
+    # Display results
+    display_analysis_results(ticker, "volatility", ["volatility_analysis"])
+
+
+def analyze_basic_statistics(ticker: str, data: pd.Series, data_type: str):
+    """Analyze basic statistics"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+        success, message = analysis_manager.analyze_basic_statistics(
+            data, ticker, st.session_state, data_type
         )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Statistical analysis failed: {str(e)}")
+
+
+def analyze_distribution(ticker: str, data: pd.Series, data_type: str):
+    """Analyze distribution"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+        success, message = analysis_manager.analyze_distribution(
+            data, ticker, st.session_state, data_type
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Distribution analysis failed: {str(e)}")
+
+
+def analyze_returns(ticker: str, price_data: pd.Series, return_type: str):
+    """Analyze returns"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+        success, message = analysis_manager.analyze_returns(
+            price_data, ticker, st.session_state, return_type
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Return analysis failed: {str(e)}")
+
+
+def analyze_volatility(
+    ticker: str, price_data: pd.Series, ohlc_data: Optional[pd.DataFrame]
+):
+    """Analyze volatility"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+        success, message = analysis_manager.analyze_volatility(
+            price_data, ticker, st.session_state, ohlc_data
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Volatility analysis failed: {str(e)}")
+
+
+def analyze_feature_quality(ticker: str, feature_data: pd.DataFrame):
+    """Analyze feature quality"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+        success, message = analysis_manager.analyze_feature_quality(
+            feature_data, ticker, st.session_state
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Feature quality analysis failed: {str(e)}")
+
+
+def display_analysis_results(ticker: str, data_type: str, analysis_types: List[str]):
+    """Display analysis results"""
+
+    try:
+        analysis_manager = st.session_state.analysis_manager
+
+        for analysis_type in analysis_types:
+            analysis_key = f"{ticker}_{data_type}_{analysis_type}"
+            results = analysis_manager.get_analysis_results(
+                analysis_key, st.session_state
+            )
+
+            if results:
+                with st.expander(
+                    f"📊 {analysis_type.replace('_', ' ').title()} Results",
+                    expanded=True,
+                ):
+
+                    if analysis_type == "statistics":
+                        display_statistics_results(results)
+                    elif analysis_type == "distribution":
+                        display_distribution_results(results)
+                    elif analysis_type == "returns_analysis":
+                        display_returns_results(results)
+                    elif analysis_type == "volatility_analysis":
+                        display_volatility_results(results)
+                    elif analysis_type == "correlation":
+                        display_correlation_results(results)
+                    elif analysis_type == "quality":
+                        display_quality_results(results)
+
+    except Exception as e:
+        st.error(f"Error displaying analysis results: {str(e)}")
+
+
+def display_statistics_results(results: Dict[str, Any]):
+    """Display basic statistics results"""
+
+    stats_results = results.get("results", {})
+    analysis_manager = st.session_state.analysis_manager
+
+    for name, basic_stats in stats_results.items():
+        st.write(f"**{name} Statistics:**")
+        formatted_stats = analysis_manager.format_statistics_for_display(basic_stats)
+
+        # Display as metrics
+        cols = st.columns(5)
+        metric_items = list(formatted_stats.items())
+
+        for i, (metric_name, metric_value) in enumerate(metric_items[:10]):
+            with cols[i % 5]:
+                st.metric(metric_name, metric_value)
+
+        # Additional stats as table
+        if len(formatted_stats) > 10:
+            remaining_stats = {k: v for k, v in list(formatted_stats.items())[10:]}
+            st.table(pd.DataFrame([remaining_stats]).T.rename(columns={0: "Value"}))
+
+
+def display_distribution_results(results: Dict[str, Any]):
+    """Display distribution analysis results"""
+
+    dist_results = results.get("results", {})
+    analysis_manager = st.session_state.analysis_manager
+
+    for name, dist_analysis in dist_results.items():
+        st.write(f"**{name} Distribution Analysis:**")
+        formatted_dist = analysis_manager.format_distribution_for_display(dist_analysis)
+
+        # Display as table
+        dist_df = pd.DataFrame([formatted_dist]).T.rename(columns={0: "Value"})
+        st.table(dist_df)
+
+
+def display_returns_results(results: Dict[str, Any]):
+    """Display return analysis results"""
+
+    return_stats = results.get("return_statistics")
+    if return_stats:
+        st.write("**Return Statistics:**")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Mean Return", f"{return_stats.mean:.6f}")
+            st.metric("Std Deviation", f"{return_stats.std:.6f}")
+            st.metric("Skewness", f"{return_stats.skewness:.4f}")
+
+        with col2:
+            st.metric("Kurtosis", f"{return_stats.kurtosis:.4f}")
+            st.metric("Sharpe Ratio", f"{return_stats.sharpe_ratio:.4f}")
+            st.metric("Max Drawdown", f"{return_stats.max_drawdown:.4f}")
+
+        with col3:
+            st.metric("Total Return", f"{return_stats.total_return:.4f}")
+            st.metric("Annualized Return", f"{return_stats.annualized_return:.4f}")
+            st.metric(
+                "Annualized Volatility", f"{return_stats.annualized_volatility:.4f}"
+            )
+
+
+def display_volatility_results(results: Dict[str, Any]):
+    """Display volatility analysis results"""
+
+    vol_stats = results.get("volatility_statistics")
+    if vol_stats:
+        st.write("**Volatility Statistics:**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Current Volatility", f"{vol_stats.current_volatility:.4f}")
+            st.metric("Average Volatility", f"{vol_stats.average_volatility:.4f}")
+            st.metric("Volatility Std", f"{vol_stats.volatility_std:.4f}")
+
+        with col2:
+            st.metric("Volatility Skewness", f"{vol_stats.volatility_skewness:.4f}")
+            st.metric("Volatility Kurtosis", f"{vol_stats.volatility_kurtosis:.4f}")
+            if vol_stats.garch_persistence:
+                st.metric("GARCH Persistence", f"{vol_stats.garch_persistence:.4f}")
+
+
+def display_correlation_results(results: Dict[str, Any]):
+    """Display correlation analysis results"""
+
+    corr_matrix = results.get("correlation_matrix")
+    if corr_matrix is not None:
+        st.write("**Correlation Matrix:**")
+        st.dataframe(corr_matrix, use_container_width=True)
+
+        # Create correlation heatmap
+        chart = create_correlation_heatmap(
+            corr_matrix, title="Feature Correlation Matrix"
+        )
+        st.plotly_chart(chart, use_container_width=True)
+
+
+def display_quality_results(results: Dict[str, Any]):
+    """Display feature quality results"""
+
+    st.write("**Feature Quality Summary:**")
+
+    quality_metrics = [
+        ("Basic Statistics", results.get("basic_statistics", False)),
+        ("Distribution Analysis", results.get("distribution_analysis", False)),
+        ("Correlation Analysis", results.get("correlation_analysis", False)),
+    ]
+
+    for metric_name, is_successful in quality_metrics:
+        status = "✅ Complete" if is_successful else "❌ Failed"
+        st.write(f"- **{metric_name}:** {status}")
+
+    st.metric("Feature Count", results.get("feature_count", 0))
+    st.metric("Sample Count", results.get("sample_count", 0))
 
 
 def display_technical_results(feature_key: str):

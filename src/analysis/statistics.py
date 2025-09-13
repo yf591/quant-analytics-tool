@@ -368,25 +368,39 @@ class StatisticsAnalyzer:
         try:
             # ARCH test using squared returns
             squared_returns = returns**2
+            squared_returns = squared_returns.dropna()
 
-            # Simple ARCH test: regress squared returns on lagged squared returns
-            from sklearn.linear_model import LinearRegression
-
-            n = len(squared_returns)
-            X = np.column_stack(
-                [squared_returns.shift(i + 1).dropna() for i in range(lags)]
-            )
-            y = squared_returns.iloc[lags:].values
-
-            if len(X) == 0 or len(y) == 0:
+            if len(squared_returns) < lags + 10:  # Need sufficient data
+                logger.warning("Insufficient data for ARCH test")
                 return 0.0, 1.0
 
-            # Remove any remaining NaN values
-            valid_idx = ~np.isnan(X).any(axis=1) & ~np.isnan(y)
-            X = X[valid_idx]
-            y = y[valid_idx]
+            # Create lagged variables with proper alignment
+            from sklearn.linear_model import LinearRegression
 
-            if len(X) < lags:
+            # Build the regression matrices with proper indexing
+            X_list = []
+
+            # Create lagged variables
+            for i in range(1, lags + 1):
+                lagged_series = squared_returns.shift(i)
+                X_list.append(lagged_series)
+
+            # Combine all lagged variables
+            X_df = pd.concat(X_list, axis=1)
+            X_df.columns = [f"lag_{i}" for i in range(1, lags + 1)]
+
+            # Align X and y by dropping NaN values
+            aligned_data = pd.concat([squared_returns, X_df], axis=1).dropna()
+
+            if len(aligned_data) < lags + 5:  # Need minimum observations
+                logger.warning("Insufficient aligned data for ARCH test")
+                return 0.0, 1.0
+
+            y = aligned_data.iloc[:, 0].values  # Current squared returns
+            X = aligned_data.iloc[:, 1:].values  # Lagged squared returns
+
+            if len(X) == 0 or len(y) == 0 or X.shape[0] != y.shape[0]:
+                logger.warning("Data alignment issue in ARCH test")
                 return 0.0, 1.0
 
             model = LinearRegression().fit(X, y)
@@ -400,6 +414,9 @@ class StatisticsAnalyzer:
             # ARCH test statistic
             statistic = len(y) * r_squared
             p_value = 1 - stats.chi2.cdf(statistic, lags)
+
+            logger.debug(f"ARCH test: statistic={statistic:.4f}, p-value={p_value:.4f}")
+            return statistic, p_value
 
             logger.debug(f"ARCH test: statistic={statistic:.4f}, p-value={p_value:.4f}")
             return statistic, p_value

@@ -79,6 +79,20 @@ class TechnicalIndicators:
         Returns:
             Dictionary of indicator results
         """
+        # Debug: Check input data types
+        print(f"DEBUG Technical: Input data types: {data.dtypes}")
+        print(f"DEBUG Technical: Input data shape: {data.shape}")
+
+        # Ensure all input columns are numeric
+        for col in data.columns:
+            if not pd.api.types.is_numeric_dtype(data[col]):
+                print(
+                    f"DEBUG Technical: Converting non-numeric column {col} from {data[col].dtype}"
+                )
+                data[col] = pd.to_numeric(data[col], errors="coerce")
+
+        print(f"DEBUG Technical: Cleaned input data types: {data.dtypes}")
+
         if indicators is None:
             indicators = [
                 "sma",
@@ -96,77 +110,119 @@ class TechnicalIndicators:
         results = {}
 
         try:
+            # Find appropriate column names (case-insensitive)
+            close_col = None
+            high_col = None
+            low_col = None
+            volume_col = None
+
+            for col in data.columns:
+                if col.lower() == "close":
+                    close_col = col
+                elif col.lower() == "high":
+                    high_col = col
+                elif col.lower() == "low":
+                    low_col = col
+                elif col.lower() == "volume":
+                    volume_col = col
+
+            if close_col is None:
+                raise ValueError("No close price column found")
+
             for indicator in indicators:
                 self.logger.debug(f"Calculating {indicator}")
+                print(f"DEBUG Technical: Calculating {indicator}")
 
                 if indicator == "sma":
+                    sma_20 = calculate_sma(data[close_col], 20)
+                    print(f"DEBUG Technical: SMA_20 dtype: {sma_20.dtype}")
                     results["sma_20"] = self._create_result(
-                        "SMA_20", calculate_sma(data["close"], 20), {"window": 20}
+                        "SMA_20", sma_20, {"window": 20}
                     )
+                    sma_50 = calculate_sma(data[close_col], 50)
+                    print(f"DEBUG Technical: SMA_50 dtype: {sma_50.dtype}")
                     results["sma_50"] = self._create_result(
-                        "SMA_50", calculate_sma(data["close"], 50), {"window": 50}
+                        "SMA_50", sma_50, {"window": 50}
                     )
 
                 elif indicator == "ema":
+                    ema_12 = calculate_ema(data[close_col], 12)
+                    print(f"DEBUG Technical: EMA_12 dtype: {ema_12.dtype}")
                     results["ema_12"] = self._create_result(
-                        "EMA_12", calculate_ema(data["close"], 12), {"window": 12}
+                        "EMA_12", ema_12, {"window": 12}
                     )
+                    ema_26 = calculate_ema(data[close_col], 26)
+                    print(f"DEBUG Technical: EMA_26 dtype: {ema_26.dtype}")
                     results["ema_26"] = self._create_result(
-                        "EMA_26", calculate_ema(data["close"], 26), {"window": 26}
+                        "EMA_26", ema_26, {"window": 26}
                     )
 
                 elif indicator == "rsi":
+                    rsi_result = calculate_rsi(data[close_col], 14)
+                    print(f"DEBUG Technical: RSI dtype: {rsi_result.dtype}")
                     results["rsi"] = self._create_result(
-                        "RSI", calculate_rsi(data["close"], 14), {"window": 14}
+                        "RSI", rsi_result, {"window": 14}
                     )
 
                 elif indicator == "macd":
-                    macd_result = calculate_macd(data["close"], 12, 26, 9)
+                    macd_result = calculate_macd(data[close_col], 12, 26, 9)
+                    print(f"DEBUG Technical: MACD dtypes: {macd_result.dtypes}")
                     results["macd"] = self._create_result(
                         "MACD", macd_result, {"fast": 12, "slow": 26, "signal": 9}
                     )
 
                 elif indicator == "bollinger_bands":
-                    bb_result = calculate_bollinger_bands(data["close"], 20, 2.0)
+                    bb_result = calculate_bollinger_bands(data[close_col], 20, 2.0)
+                    print(f"DEBUG Technical: BB dtypes: {bb_result.dtypes}")
                     results["bollinger_bands"] = self._create_result(
                         "Bollinger_Bands", bb_result, {"window": 20, "num_std": 2.0}
                     )
 
                 elif indicator == "atr":
-                    results["atr"] = self._create_result(
-                        "ATR",
-                        calculate_atr(data["high"], data["low"], data["close"], 14),
-                        {"window": 14},
-                    )
+                    if high_col and low_col:
+                        atr_result = calculate_atr(
+                            data[high_col], data[low_col], data[close_col], 14
+                        )
+                        print(f"DEBUG Technical: ATR dtype: {atr_result.dtype}")
+                        results["atr"] = self._create_result(
+                            "ATR",
+                            atr_result,
+                            {"window": 14},
+                        )
 
                 elif indicator == "stochastic":
-                    stoch_result = calculate_stochastic(
-                        data["high"], data["low"], data["close"], 14, 3
-                    )
-                    results["stochastic"] = self._create_result(
-                        "Stochastic", stoch_result, {"k_window": 14, "d_window": 3}
-                    )
+                    if high_col and low_col:
+                        stoch_result = calculate_stochastic(
+                            data[high_col], data[low_col], data[close_col], 14, 3
+                        )
+                        results["stochastic"] = self._create_result(
+                            "Stochastic", stoch_result, {"k_window": 14, "d_window": 3}
+                        )
 
                 elif indicator == "williams_r":
-                    results["williams_r"] = self._create_result(
-                        "Williams_R",
-                        calculate_williams_r(
-                            data["high"], data["low"], data["close"], 14
-                        ),
-                        {"window": 14},
-                    )
+                    if high_col and low_col:
+                        results["williams_r"] = self._create_result(
+                            "Williams_R",
+                            calculate_williams_r(
+                                data[high_col], data[low_col], data[close_col], 14
+                            ),
+                            {"window": 14},
+                        )
 
                 elif indicator == "cci":
-                    results["cci"] = self._create_result(
-                        "CCI",
-                        calculate_cci(data["high"], data["low"], data["close"], 20),
-                        {"window": 20},
-                    )
+                    if high_col and low_col:
+                        results["cci"] = self._create_result(
+                            "CCI",
+                            calculate_cci(
+                                data[high_col], data[low_col], data[close_col], 20
+                            ),
+                            {"window": 20},
+                        )
 
                 elif indicator == "momentum":
                     results["momentum"] = self._create_result(
                         "Momentum",
-                        calculate_momentum(data["close"], 10),
+                        calculate_momentum(data[close_col], 10),
                         {"window": 10},
                     )
 
@@ -203,7 +259,12 @@ def calculate_sma(data: pd.Series, window: int) -> pd.Series:
     if len(data) < window:
         raise ValueError(f"Insufficient data points. Need at least {window} points")
 
-    return data.rolling(window=window, min_periods=window).mean()
+    # Ensure input is numeric
+    numeric_data = pd.to_numeric(data, errors="coerce")
+    result = numeric_data.rolling(window=window, min_periods=window).mean()
+
+    # Ensure output is numeric
+    return pd.to_numeric(result, errors="coerce")
 
 
 def calculate_ema(data: pd.Series, window: int) -> pd.Series:
@@ -220,7 +281,12 @@ def calculate_ema(data: pd.Series, window: int) -> pd.Series:
     if len(data) < window:
         raise ValueError(f"Insufficient data points. Need at least {window} points")
 
-    return data.ewm(span=window, adjust=False).mean()
+    # Ensure input is numeric
+    numeric_data = pd.to_numeric(data, errors="coerce")
+    result = numeric_data.ewm(span=window, adjust=False).mean()
+
+    # Ensure output is numeric
+    return pd.to_numeric(result, errors="coerce")
 
 
 def calculate_rsi(data: pd.Series, window: int = 14) -> pd.Series:

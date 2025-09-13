@@ -175,10 +175,14 @@ class FeatureEngineeringManager:
                     bar_type = config.get("bar_type", "volume")
                     threshold = config.get("bar_threshold")
 
+                    # Determine correct price column name
+                    price_col = "Close" if "Close" in clean_data.columns else "close"
+
                     info_bars = self.advanced_features.create_information_bars(
                         clean_data,
                         bar_type=bar_type,
                         threshold=threshold,
+                        price_col=price_col,
                         volume_col=volume_col,
                     )
                     results["information_bars"] = info_bars
@@ -237,6 +241,10 @@ class FeatureEngineeringManager:
             if clean_data is None:
                 return False, "Data validation failed"
 
+            # Debug: Print data types before pipeline
+            print(f"DEBUG: Clean data types: {clean_data.dtypes}")
+            print(f"DEBUG: Clean data sample:\n{clean_data.head()}")
+
             # Initialize pipeline
             pipeline_config = {
                 "include_technical": config.get("include_technical", True),
@@ -247,9 +255,11 @@ class FeatureEngineeringManager:
                 "correlation_threshold": config.get("correlation_threshold", 0.8),
             }
 
-            # Run pipeline
-            results = self.feature_pipeline.run_comprehensive_pipeline(
-                data=clean_data, config=pipeline_config
+            # Run pipeline using generate_features method
+            results = self.feature_pipeline.generate_features(
+                data=clean_data,
+                target=None,
+                force_recompute=True,
             )
 
             if results is None or results.features is None:
@@ -274,6 +284,9 @@ class FeatureEngineeringManager:
             )
 
         except Exception as e:
+            import traceback
+
+            print(f"DEBUG: Full traceback:\n{traceback.format_exc()}")
             return False, f"Feature pipeline failed: {str(e)}"
 
     def _validate_and_normalize_data(
@@ -301,7 +314,14 @@ class FeatureEngineeringManager:
             # Create normalized data with standard column names
             normalized_data = pd.DataFrame(index=data.index)
             for standard_col, actual_col in column_mapping.items():
-                normalized_data[standard_col] = data[actual_col]
+                try:
+                    # Force conversion to numeric, coercing errors to NaN
+                    normalized_data[standard_col] = pd.to_numeric(
+                        data[actual_col], errors="coerce"
+                    )
+                except Exception:
+                    # If conversion fails, use original data
+                    normalized_data[standard_col] = data[actual_col]
 
             # Remove any rows with NaN values in required columns
             normalized_data = normalized_data.dropna()
@@ -322,8 +342,8 @@ class FeatureEngineeringManager:
             if "Close" not in data.columns and "close" not in data.columns:
                 return None
 
-            # Standardize column names
-            clean_data = data.copy()
+            # Create a completely new DataFrame to avoid reference issues
+            clean_data = pd.DataFrame(index=data.index)
 
             # Map common column name variations
             column_mapping = {
@@ -334,21 +354,75 @@ class FeatureEngineeringManager:
                 "volume": "Volume",
             }
 
-            clean_data = clean_data.rename(columns=column_mapping)
+            # First pass: standardize column names
+            data_copy = data.copy()
+            data_copy = data_copy.rename(columns=column_mapping)
 
             # Ensure Close column exists
+            if "Close" not in data_copy.columns:
+                return None
+
+            # Second pass: Convert all columns to numeric, handling errors
+            numeric_columns = ["Open", "High", "Low", "Close", "Volume"]
+            for col in numeric_columns:
+                if col in data_copy.columns:
+                    try:
+                        # Force conversion to numeric, coercing errors to NaN
+                        numeric_series = pd.to_numeric(data_copy[col], errors="coerce")
+                        # Only keep if we have enough valid numeric data
+                        if numeric_series.notna().sum() > len(numeric_series) * 0.8:
+                            clean_data[col] = numeric_series
+                        else:
+                            print(
+                                f"DEBUG: Column {col} has too many non-numeric values, skipping"
+                            )
+                    except Exception as e:
+                        print(f"DEBUG: Failed to convert column {col}: {e}")
+                        continue
+
+            # Ensure we have at least Close column
             if "Close" not in clean_data.columns:
                 return None
 
-            # Remove NaN values
-            clean_data = clean_data.dropna()
+            # CRITICAL: Remove any non-numeric columns that might have been missed
+            non_numeric_cols = []
+            for col in clean_data.columns:
+                if not pd.api.types.is_numeric_dtype(clean_data[col]):
+                    non_numeric_cols.append(col)
+
+            if non_numeric_cols:
+                print(f"DEBUG: Dropping non-numeric columns: {non_numeric_cols}")
+                clean_data = clean_data.drop(columns=non_numeric_cols)
+
+            # Ensure we have at least Close column after dropping non-numeric columns
+            if "Close" not in clean_data.columns:
+                return None
+
+            # Remove rows with NaN values in essential columns
+            essential_columns = ["Close"]
+            for col in essential_columns:
+                if col in clean_data.columns:
+                    clean_data = clean_data[clean_data[col].notna()]
+
+            # Final check: ensure all remaining data is numeric
+            for col in clean_data.columns:
+                if not pd.api.types.is_numeric_dtype(clean_data[col]):
+                    print(
+                        f"DEBUG: Column {col} is not numeric after conversion: {clean_data[col].dtype}"
+                    )
+                    clean_data[col] = pd.to_numeric(clean_data[col], errors="coerce")
 
             if len(clean_data) < 30:
                 return None
 
+            print(f"DEBUG: Final clean_data dtypes: {clean_data.dtypes}")
+            print(f"DEBUG: Final clean_data shape: {clean_data.shape}")
+            print(f"DEBUG: Final clean_data columns: {list(clean_data.columns)}")
+
             return clean_data
 
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Exception in _validate_price_data: {e}")
             return None
 
     def _build_indicator_list(self, config: Dict[str, Any]) -> List[str]:
