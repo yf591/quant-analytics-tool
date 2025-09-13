@@ -427,3 +427,238 @@ def create_date_range_form(
     except Exception as e:
         st.error(f"Error creating date range form: {str(e)}")
         return datetime.now().date() - timedelta(days=365), datetime.now().date()
+
+
+def create_model_selection_form(
+    available_models: List[str] = None, title: str = "Model Selection"
+) -> Dict[str, Any]:
+    """
+    Create a form for selecting model type and configuration.
+
+    Args:
+        available_models: List of available model types
+        title: Form title
+
+    Returns:
+        Dictionary containing model configuration
+    """
+    try:
+        st.subheader(title)
+
+        if available_models is None:
+            available_models = [
+                "Random Forest",
+                "XGBoost",
+                "SVM",
+                "LSTM",
+                "GRU",
+                "Transformer",
+                "Ensemble",
+            ]
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            model_type = st.selectbox(
+                "Model Type",
+                options=available_models,
+                help="Select the machine learning model type",
+            )
+
+        with col2:
+            task_type = st.selectbox(
+                "Task Type",
+                options=["Classification", "Regression"],
+                help="Select the type of machine learning task",
+            )
+
+        # Model class mapping
+        model_class = f"Quant{model_type.replace(' ', '')}{'Classifier' if task_type == 'Classification' else 'Regressor'}"
+
+        return {
+            "model_type": model_type,
+            "task_type": task_type,
+            "model_class": model_class,
+        }
+
+    except Exception as e:
+        st.error(f"Error creating model selection form: {str(e)}")
+        return {
+            "model_type": "Random Forest",
+            "task_type": "Classification",
+            "model_class": "QuantRandomForestClassifier",
+        }
+
+
+def create_hyperparameter_form(
+    model_class: str, title: str = "Hyperparameter Configuration"
+) -> Dict[str, Any]:
+    """
+    Create a form for configuring model hyperparameters.
+
+    Args:
+        model_class: Model class name
+        title: Form title
+
+    Returns:
+        Dictionary containing hyperparameter configuration
+    """
+    try:
+        st.subheader(title)
+
+        hyperparams = {}
+
+        # Default hyperparameters based on model type
+        if "RandomForest" in model_class:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                hyperparams["n_estimators"] = st.slider(
+                    "Number of Estimators", 10, 500, 100, 10
+                )
+                hyperparams["max_depth"] = st.slider("Max Depth", 1, 50, 10)
+
+            with col2:
+                hyperparams["min_samples_split"] = st.slider(
+                    "Min Samples Split", 2, 20, 2
+                )
+                hyperparams["min_samples_leaf"] = st.slider(
+                    "Min Samples Leaf", 1, 20, 1
+                )
+
+        elif "XGBoost" in model_class:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                hyperparams["n_estimators"] = st.slider(
+                    "Number of Estimators", 10, 500, 100, 10
+                )
+                hyperparams["max_depth"] = st.slider("Max Depth", 1, 20, 6)
+
+            with col2:
+                hyperparams["learning_rate"] = st.slider(
+                    "Learning Rate", 0.01, 1.0, 0.1, 0.01
+                )
+                hyperparams["subsample"] = st.slider("Subsample", 0.1, 1.0, 0.8, 0.1)
+
+        elif "SVM" in model_class:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                hyperparams["C"] = st.slider("Regularization (C)", 0.1, 100.0, 1.0, 0.1)
+
+            with col2:
+                hyperparams["kernel"] = st.selectbox(
+                    "Kernel", ["rbf", "linear", "poly", "sigmoid"]
+                )
+
+        elif "LSTM" in model_class or "GRU" in model_class:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                hyperparams["hidden_size"] = st.slider("Hidden Size", 16, 512, 64, 16)
+                hyperparams["num_layers"] = st.slider("Number of Layers", 1, 5, 2)
+
+            with col2:
+                hyperparams["dropout"] = st.slider("Dropout", 0.0, 0.8, 0.2, 0.1)
+                hyperparams["learning_rate"] = st.slider(
+                    "Learning Rate", 0.0001, 0.1, 0.001, 0.0001
+                )
+
+        else:
+            # Generic hyperparameters
+            st.info("Using default hyperparameters for this model type.")
+
+        return hyperparams
+
+    except Exception as e:
+        st.error(f"Error creating hyperparameter form: {str(e)}")
+        return {}
+
+
+def create_training_config_form(
+    title: str = "Training Configuration",
+) -> Dict[str, Any]:
+    """
+    Create a form for training configuration.
+
+    Args:
+        title: Form title
+
+    Returns:
+        Dictionary containing training configuration
+    """
+    try:
+        st.subheader(title)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            test_size = st.slider(
+                "Test Size",
+                0.1,
+                0.4,
+                0.2,
+                0.05,
+                help="Proportion of data to use for testing",
+            )
+            validation_size = st.slider(
+                "Validation Size",
+                0.1,
+                0.3,
+                0.2,
+                0.05,
+                help="Proportion of training data to use for validation",
+            )
+
+        with col2:
+            cv_folds = st.slider(
+                "Cross-Validation Folds",
+                3,
+                10,
+                5,
+                help="Number of folds for cross-validation",
+            )
+            random_state = st.number_input(
+                "Random State", 0, 9999, 42, help="Random seed for reproducibility"
+            )
+
+        # Advanced options
+        with st.expander("Advanced Options", expanded=False):
+            feature_selection = st.checkbox(
+                "Enable Feature Selection",
+                value=True,
+                help="Automatically select the most important features",
+            )
+            hyperparameter_tuning = st.checkbox(
+                "Enable Hyperparameter Tuning",
+                value=False,
+                help="Automatically tune hyperparameters using grid search",
+            )
+            ensemble_training = st.checkbox(
+                "Enable Ensemble Training",
+                value=False,
+                help="Train multiple models and combine predictions",
+            )
+
+        return {
+            "test_size": test_size,
+            "validation_size": validation_size,
+            "cv_folds": cv_folds,
+            "random_state": random_state,
+            "feature_selection": feature_selection,
+            "hyperparameter_tuning": hyperparameter_tuning,
+            "ensemble_training": ensemble_training,
+        }
+
+    except Exception as e:
+        st.error(f"Error creating training config form: {str(e)}")
+        return {
+            "test_size": 0.2,
+            "validation_size": 0.2,
+            "cv_folds": 5,
+            "random_state": 42,
+            "feature_selection": True,
+            "hyperparameter_tuning": False,
+            "ensemble_training": False,
+        }

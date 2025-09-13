@@ -963,13 +963,13 @@ def create_information_bars_chart(
     try:
         required_cols = ["open", "high", "low", "close"]
         if not all(col in bars_data.columns for col in required_cols):
-            st.warning(
-                f"Information bars data is missing OHLC columns. Available columns: {list(bars_data.columns)}"
+            st.error(
+                f"Required columns {required_cols} not found in data. Available: {list(bars_data.columns)}"
             )
             return go.Figure()
 
         if len(bars_data) == 0:
-            st.warning("Information bars data is empty")
+            st.warning("No data available for information bars chart")
             return go.Figure()
 
         fig = go.Figure(
@@ -993,20 +993,11 @@ def create_information_bars_chart(
                     y=bars_data["volume"],
                     name="Volume",
                     yaxis="y2",
-                    marker_color="rgba(255, 165, 0, 0.7)",
-                    opacity=0.7,
-                )
-            )
-
-            # Create secondary y-axis for volume
-            fig.update_layout(
-                yaxis2=dict(
-                    title="Volume",
-                    overlaying="y",
-                    side="right",
-                    showgrid=False,
+                    opacity=0.3,
                 ),
             )
+
+            fig.update_layout(yaxis2=dict(title="Volume", overlaying="y", side="right"))
 
         fig.update_layout(
             title=title,
@@ -1023,4 +1014,265 @@ def create_information_bars_chart(
 
     except Exception as e:
         st.error(f"Error creating information bars chart: {str(e)}")
+        return go.Figure()
+
+
+def create_model_performance_chart(
+    evaluation_data: Dict[str, Any],
+    height: int = 400,
+    title: str = "Model Performance Metrics",
+) -> go.Figure:
+    """
+    Create model performance visualization chart.
+
+    Args:
+        evaluation_data: Dictionary containing evaluation metrics
+        height: Chart height
+        title: Chart title
+
+    Returns:
+        Plotly figure object
+    """
+    try:
+        # Extract metrics for classification or regression
+        if "classification_metrics" in evaluation_data:
+            metrics = evaluation_data["classification_metrics"]
+            metric_names = ["Accuracy", "Precision", "Recall", "F1 Score", "AUC"]
+            metric_values = [
+                metrics.get("accuracy", 0),
+                metrics.get("precision", 0),
+                metrics.get("recall", 0),
+                metrics.get("f1_score", 0),
+                metrics.get("roc_auc", 0),
+            ]
+        elif "regression_metrics" in evaluation_data:
+            metrics = evaluation_data["regression_metrics"]
+            metric_names = ["R² Score", "MSE", "RMSE", "MAE"]
+            metric_values = [
+                metrics.get("r2_score", 0),
+                metrics.get("mse", 0),
+                metrics.get("rmse", 0),
+                metrics.get("mae", 0),
+            ]
+        else:
+            # Fallback for simple metrics
+            train_score = evaluation_data.get("train_score", 0)
+            test_score = evaluation_data.get("test_score", 0)
+            metric_names = ["Train Score", "Test Score"]
+            metric_values = [train_score, test_score]
+
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=metric_names,
+                    y=metric_values,
+                    marker_color="lightblue",
+                    hovertemplate="Metric: %{x}<br>Value: %{y:.4f}<extra></extra>",
+                )
+            ]
+        )
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Metrics",
+            yaxis_title="Score",
+            height=height,
+            template="plotly_white",
+            showlegend=False,
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating model performance chart: {str(e)}")
+        return go.Figure()
+
+
+def create_confusion_matrix_chart(
+    confusion_matrix: List[List[int]],
+    class_labels: List[str] = None,
+    height: int = 400,
+    title: str = "Confusion Matrix",
+) -> go.Figure:
+    """
+    Create confusion matrix heatmap.
+
+    Args:
+        confusion_matrix: 2D array/list representing confusion matrix
+        class_labels: List of class labels
+        height: Chart height
+        title: Chart title
+
+    Returns:
+        Plotly figure object
+    """
+    try:
+        import numpy as np
+
+        # Convert to numpy array if needed
+        cm = np.array(confusion_matrix)
+
+        if class_labels is None:
+            class_labels = [f"Class {i}" for i in range(len(cm))]
+
+        # Create text annotations
+        text = []
+        for i in range(len(cm)):
+            row_text = []
+            for j in range(len(cm[0])):
+                row_text.append(f"{cm[i][j]}")
+            text.append(row_text)
+
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=cm,
+                x=class_labels,
+                y=class_labels,
+                text=text,
+                texttemplate="%{text}",
+                textfont={"size": 12},
+                colorscale="Blues",
+                hovertemplate="Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}<extra></extra>",
+            )
+        )
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Predicted Label",
+            yaxis_title="True Label",
+            height=height,
+            template="plotly_white",
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating confusion matrix chart: {str(e)}")
+        return go.Figure()
+
+
+def create_learning_curve_chart(
+    train_scores: List[float],
+    val_scores: List[float],
+    train_sizes: List[int] = None,
+    height: int = 400,
+    title: str = "Learning Curve",
+) -> go.Figure:
+    """
+    Create learning curve chart showing training and validation scores.
+
+    Args:
+        train_scores: List of training scores
+        val_scores: List of validation scores
+        train_sizes: List of training set sizes
+        height: Chart height
+        title: Chart title
+
+    Returns:
+        Plotly figure object
+    """
+    try:
+        if train_sizes is None:
+            train_sizes = list(range(1, len(train_scores) + 1))
+
+        fig = go.Figure()
+
+        # Training scores
+        fig.add_trace(
+            go.Scatter(
+                x=train_sizes,
+                y=train_scores,
+                mode="lines+markers",
+                name="Training Score",
+                line=dict(color="blue", width=2),
+                marker=dict(size=6),
+                hovertemplate="Size: %{x}<br>Training Score: %{y:.4f}<extra></extra>",
+            )
+        )
+
+        # Validation scores
+        fig.add_trace(
+            go.Scatter(
+                x=train_sizes,
+                y=val_scores,
+                mode="lines+markers",
+                name="Validation Score",
+                line=dict(color="red", width=2),
+                marker=dict(size=6),
+                hovertemplate="Size: %{x}<br>Validation Score: %{y:.4f}<extra></extra>",
+            )
+        )
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Training Set Size",
+            yaxis_title="Score",
+            height=height,
+            template="plotly_white",
+            hovermode="x unified",
+            showlegend=True,
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating learning curve chart: {str(e)}")
+        return go.Figure()
+
+
+def create_model_comparison_chart(
+    comparison_data: List[Dict[str, Any]],
+    metric_column: str = "Accuracy",
+    height: int = 400,
+    title: str = "Model Comparison",
+) -> go.Figure:
+    """
+    Create model comparison bar chart.
+
+    Args:
+        comparison_data: List of dictionaries containing model data
+        metric_column: Column name for the metric to compare
+        height: Chart height
+        title: Chart title
+
+    Returns:
+        Plotly figure object
+    """
+    try:
+        if not comparison_data:
+            st.warning("No model comparison data available")
+            return go.Figure()
+
+        model_names = [
+            data.get("Model", f"Model {i}") for i, data in enumerate(comparison_data)
+        ]
+        metric_values = [data.get(metric_column, 0) for data in comparison_data]
+
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=model_names,
+                    y=metric_values,
+                    marker_color="lightcoral",
+                    hovertemplate="Model: %{x}<br>"
+                    + metric_column
+                    + ": %{y:.4f}<extra></extra>",
+                )
+            ]
+        )
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Models",
+            yaxis_title=metric_column,
+            height=height,
+            template="plotly_white",
+            showlegend=False,
+            xaxis_tickangle=45,
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating model comparison chart: {str(e)}")
         return go.Figure()

@@ -413,3 +413,184 @@ def display_computation_status(
 
     except Exception as e:
         st.error(f"Error displaying computation status: {str(e)}")
+
+
+def display_model_metrics(
+    evaluation_data: Dict[str, Any], title: str = "Model Performance"
+) -> None:
+    """
+    Display model performance metrics.
+
+    Args:
+        evaluation_data: Dictionary containing evaluation metrics
+        title: Title for the metrics section
+    """
+    try:
+        st.subheader(title)
+
+        if "classification_metrics" in evaluation_data:
+            metrics = evaluation_data["classification_metrics"]
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                accuracy = metrics.get("accuracy", 0)
+                st.metric("Accuracy", f"{accuracy:.4f}")
+
+            with col2:
+                precision = metrics.get("precision", 0)
+                st.metric("Precision", f"{precision:.4f}")
+
+            with col3:
+                recall = metrics.get("recall", 0)
+                st.metric("Recall", f"{recall:.4f}")
+
+            with col4:
+                f1_score = metrics.get("f1_score", 0)
+                st.metric("F1 Score", f"{f1_score:.4f}")
+
+        elif "regression_metrics" in evaluation_data:
+            metrics = evaluation_data["regression_metrics"]
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                r2 = metrics.get("r2_score", 0)
+                st.metric("R² Score", f"{r2:.4f}")
+
+            with col2:
+                mse = metrics.get("mse", 0)
+                st.metric("MSE", f"{mse:.4f}")
+
+            with col3:
+                rmse = metrics.get("rmse", 0)
+                st.metric("RMSE", f"{rmse:.4f}")
+
+            with col4:
+                mae = metrics.get("mae", 0)
+                st.metric("MAE", f"{mae:.4f}")
+
+        else:
+            # Simple metrics display
+            train_score = evaluation_data.get("train_score", 0)
+            test_score = evaluation_data.get("test_score", 0)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.metric("Training Score", f"{train_score:.4f}")
+
+            with col2:
+                st.metric("Test Score", f"{test_score:.4f}")
+
+    except Exception as e:
+        st.error(f"Error displaying model metrics: {str(e)}")
+
+
+def display_training_progress(
+    progress_data: Dict[str, Any] = None, title: str = "Training Progress"
+) -> None:
+    """
+    Display training progress information.
+
+    Args:
+        progress_data: Dictionary containing progress information
+        title: Title for the progress section
+    """
+    try:
+        st.subheader(title)
+
+        if progress_data is None:
+            st.info("No active training session.")
+            return
+
+        # Progress bar
+        progress = progress_data.get("progress", 0)
+        st.progress(progress)
+
+        # Status information
+        status = progress_data.get("status", "Unknown")
+        st.write(f"**Status:** {status}")
+
+        # Time information
+        if "start_time" in progress_data:
+            start_time = progress_data["start_time"]
+            if isinstance(start_time, str):
+                start_time = datetime.fromisoformat(start_time)
+
+            elapsed = datetime.now() - start_time
+            st.write(f"**Elapsed Time:** {elapsed}")
+
+        # Model information
+        if "model_config" in progress_data:
+            config = progress_data["model_config"]
+            st.write(f"**Model Type:** {config.get('model_type', 'Unknown')}")
+            st.write(f"**Task Type:** {config.get('task_type', 'Unknown')}")
+
+        # Current metrics
+        if "metrics" in progress_data:
+            metrics = progress_data["metrics"]
+            with st.expander("Current Metrics", expanded=True):
+                for metric, value in metrics.items():
+                    st.metric(metric.replace("_", " ").title(), f"{value:.4f}")
+
+    except Exception as e:
+        st.error(f"Error displaying training progress: {str(e)}")
+
+
+def display_model_comparison(
+    comparison_data: List[Dict[str, Any]], title: str = "Model Comparison"
+) -> None:
+    """
+    Display model comparison table.
+
+    Args:
+        comparison_data: List of dictionaries containing model data
+        title: Title for the comparison section
+    """
+    try:
+        st.subheader(title)
+
+        if not comparison_data:
+            st.info("No models available for comparison.")
+            return
+
+        # Convert to DataFrame for better display
+        df = pd.DataFrame(comparison_data)
+
+        # Format numeric columns
+        numeric_columns = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = df[col].round(4)
+
+        st.dataframe(df, use_container_width=True)
+
+        # Highlight best performing model
+        if len(df) > 1:
+            # Try to find a performance metric to highlight
+            performance_cols = [
+                col
+                for col in df.columns
+                if any(
+                    metric in col.lower()
+                    for metric in ["accuracy", "f1", "r2", "score"]
+                )
+            ]
+
+            if performance_cols:
+                best_col = performance_cols[0]
+                best_idx = df[best_col].idxmax()
+                best_model = (
+                    df.loc[best_idx, "Model"]
+                    if "Model" in df.columns
+                    else f"Model {best_idx}"
+                )
+                best_score = df.loc[best_idx, best_col]
+
+                st.success(
+                    f"🏆 **Best Model:** {best_model} ({best_col}: {best_score:.4f})"
+                )
+
+    except Exception as e:
+        st.error(f"Error displaying model comparison: {str(e)}")

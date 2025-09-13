@@ -556,3 +556,60 @@ class ModelTrainingManager:
 
         if "current_training" in session_state:
             del session_state["current_training"]
+
+    def get_default_hyperparams(self, model_type: str) -> Dict[str, Any]:
+        """
+        Get default hyperparameters for a given model type.
+
+        Args:
+            model_type: Model type (e.g., "random_forest", "xgboost", etc.)
+
+        Returns:
+            Dictionary of default hyperparameters
+        """
+
+        hyperparams_map = {
+            "random_forest": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1,
+                "random_state": 42,
+            },
+            "xgboost": {
+                "n_estimators": 100,
+                "max_depth": 6,
+                "learning_rate": 0.1,
+                "subsample": 0.8,
+                "random_state": 42,
+            },
+            "svm": {"C": 1.0, "kernel": "rbf", "random_state": 42},
+            "lstm": {
+                "hidden_size": 64,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+            },
+            "gru": {
+                "hidden_size": 64,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+            },
+            "transformer": {
+                "d_model": 64,
+                "nhead": 8,
+                "num_layers": 2,
+                "dropout": 0.1,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "epochs": 100,
+            },
+            "ensemble": {"n_estimators": 100, "random_state": 42},
+        }
+
+        return hyperparams_map.get(model_type, {})
