@@ -655,6 +655,25 @@ def run_feature_pipeline(ticker: str, data: pd.DataFrame, config: Dict[str, Any]
         # Remove features with all NaN values
         all_features = all_features.dropna(axis=1, how="all")
 
+        # Ensure all features are numeric for Arrow compatibility
+        for col in all_features.columns:
+            if all_features[col].dtype == "object":
+                try:
+                    all_features[col] = pd.to_numeric(
+                        all_features[col], errors="coerce"
+                    )
+                except:
+                    # If conversion fails, this column will be dropped
+                    all_features = all_features.drop(columns=[col])
+                    st.warning(f"⚠️ Dropped non-numeric feature: {col}")
+
+        # Remove any remaining rows with NaN values to ensure clean data
+        all_features = all_features.dropna()
+
+        if len(all_features) == 0:
+            st.error("❌ No valid feature data remaining after cleaning")
+            return
+
         # Feature selection if enabled
         if config.get("feature_selection", True) and len(
             all_features.columns
@@ -975,26 +994,48 @@ def display_pipeline_results(pipeline_key: str):
         if results.quality_metrics:
             st.subheader("📊 Feature Quality Metrics")
 
-            # Safely display quality metrics, excluding complex objects
-            display_metrics = {}
-            for key, value in results.quality_metrics.items():
-                if isinstance(value, (int, float, str, bool)):
-                    display_metrics[key] = value
-                elif isinstance(value, dict):
-                    # Display dict contents as string representation
-                    display_metrics[f"{key}_info"] = str(value)
-                else:
-                    display_metrics[f"{key}_type"] = str(type(value).__name__)
+            # Safely display quality metrics with proper type conversion
+            col1, col2 = st.columns(2)
 
-            if display_metrics:
-                quality_df = pd.DataFrame([display_metrics]).T
-                quality_df.columns = ["Value"]
-                st.dataframe(quality_df, use_container_width=True)
-            else:
-                st.write(
-                    "Quality metrics available but cannot be displayed in table format"
+            with col1:
+                st.metric(
+                    "Total Features", results.quality_metrics.get("total_features", 0)
                 )
-                st.json(results.quality_metrics)
+                if "completeness" in results.quality_metrics:
+                    completeness = results.quality_metrics["completeness"]
+                    st.metric("Data Completeness", f"{completeness:.2%}")
+
+            with col2:
+                if "correlation_threshold" in results.quality_metrics:
+                    threshold = results.quality_metrics["correlation_threshold"]
+                    st.metric("Correlation Threshold", f"{threshold:.2f}")
+
+            # Display feature metadata separately
+            if "feature_metadata" in results.quality_metrics:
+                st.subheader("🔍 Feature Categories")
+                metadata = results.quality_metrics["feature_metadata"]
+
+                for category, features in metadata.items():
+                    if isinstance(features, list) and features:
+                        st.write(f"**{category.replace('_', ' ').title()}:**")
+                        feature_text = ", ".join(features)
+                        st.write(feature_text)
+
+            # Show other metrics as JSON if they exist
+            other_metrics = {
+                k: v
+                for k, v in results.quality_metrics.items()
+                if k
+                not in [
+                    "total_features",
+                    "completeness",
+                    "correlation_threshold",
+                    "feature_metadata",
+                ]
+            }
+            if other_metrics:
+                st.subheader("📋 Additional Metrics")
+                st.json(other_metrics)
 
         # Feature importance if available
         if (

@@ -154,6 +154,23 @@ def display_feature_table(
         # Display table
         st.write(f"**Feature Data (showing up to {max_rows} rows):**")
         display_df = feature_df.head(max_rows)
+
+        # Ensure all columns are properly formatted for Arrow serialization
+        try:
+            # Convert any object columns to strings if they contain non-numeric data
+            for col in display_df.columns:
+                if display_df[col].dtype == "object":
+                    # Try to convert to numeric first
+                    try:
+                        display_df[col] = pd.to_numeric(
+                            display_df[col], errors="coerce"
+                        )
+                    except:
+                        # If conversion fails, convert to string
+                        display_df[col] = display_df[col].astype(str)
+        except Exception as convert_error:
+            st.warning(f"Data type conversion warning: {convert_error}")
+
         st.dataframe(
             display_df,
             use_container_width=True,
