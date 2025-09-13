@@ -25,9 +25,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 try:
-    from src.data.collectors import YahooFinanceCollector, AlphaVantageCollector
-    from src.data.storage import DataStorage
-    from src.data.validation import DataQualityValidator
+    from src.data.collectors import YFinanceCollector, DataRequest
+    from src.data.storage import SQLiteStorage
+    from src.data.validators import DataValidator
     from src.config import settings
 except ImportError as e:
     # Handle import errors gracefully for testing
@@ -38,8 +38,8 @@ class DataAcquisitionManager:
     """Manager class for data acquisition operations"""
 
     def __init__(self):
-        self.storage = DataStorage()
-        self.validator = DataQualityValidator()
+        self.storage = SQLiteStorage()
+        self.validator = DataValidator()
 
     def initialize_session_state(self, session_state: Dict) -> None:
         """Initialize session state for data acquisition"""
@@ -81,7 +81,7 @@ class DataAcquisitionManager:
                 return validation_result
 
             # Initialize collector
-            collector = YahooFinanceCollector()
+            collector = YFinanceCollector()
 
             # Extract parameters
             symbols = [s.strip().upper() for s in config["symbols"].split(",")]
@@ -115,10 +115,40 @@ class DataAcquisitionManager:
                         }
                     )
 
-                    # Collect data
-                    data = collector.collect_data(
-                        symbol=symbol, period=period, interval=interval
+                    # Calculate date range based on period
+                    end_date = datetime.now()
+
+                    # Map period to days for calculation
+                    period_to_days = {
+                        "1d": 1,
+                        "5d": 5,
+                        "1mo": 30,
+                        "3mo": 90,
+                        "6mo": 180,
+                        "1y": 365,
+                        "2y": 730,
+                        "5y": 1825,
+                        "10y": 3650,
+                        "ytd": (
+                            datetime.now() - datetime(datetime.now().year, 1, 1)
+                        ).days,
+                        "max": 10950,  # Approximately 30 years
+                    }
+
+                    days_back = period_to_days.get(period, 365)  # Default to 1 year
+                    start_date = end_date - timedelta(days=days_back)
+
+                    # Create DataRequest object with required dates
+                    request = DataRequest(
+                        symbol=symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                        period=period,
+                        interval=interval,
                     )
+
+                    # Collect data
+                    data = collector.collect_data(request)
 
                     if data is not None and not data.empty:
                         # Store in cache

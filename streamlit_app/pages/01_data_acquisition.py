@@ -20,26 +20,17 @@ sys.path.append(str(project_root))
 sys.path.append(str(streamlit_root))
 
 try:
-    # Week 2: Data Collection Framework Integration
-    from src.data.collectors import YFinanceCollector, DataRequest
-    from src.data.validators import DataValidator
-    from src.data.storage import SQLiteStorage
-    from src.config import settings
-    
+    # Week 14: Streamlit utils integration - use utility managers
+    from utils.data_utils import DataAcquisitionManager
+
     # Streamlit components
-    from components.charts import (
-        create_price_chart,
-        create_correlation_heatmap
-    )
+    from components.charts import create_price_chart, create_correlation_heatmap
     from components.data_display import (
         display_data_metrics,
         display_computation_status,
-        display_alert_message
+        display_alert_message,
     )
-    from components.forms import (
-        create_data_selection_form,
-        create_date_range_form
-    )
+    from components.forms import create_data_selection_form, create_date_range_form
     from components.data_management import (
         create_data_source_selection_form,
         display_collection_status,
@@ -47,7 +38,7 @@ try:
         display_storage_management,
         create_data_quality_dashboard,
         display_data_comparison,
-        create_batch_operation_interface
+        create_batch_operation_interface,
     )
 except ImportError as e:
     st.error(f"Import error: {e}")
@@ -56,116 +47,160 @@ except ImportError as e:
 
 def main():
     """Professional Data Acquisition Interface"""
-    
-    # Initialize session state
-    initialize_session_state()
-    
+
+    # Initialize data acquisition manager
+    data_manager = DataAcquisitionManager()
+
+    # Initialize session state using the manager
+    data_manager.initialize_session_state(st.session_state)
+
     st.set_page_config(
         page_title="📊 Data Acquisition",
         page_icon="📊",
         layout="wide",
-        initial_sidebar_state="collapsed"
+        initial_sidebar_state="collapsed",
     )
-    
+
     st.title("📊 Data Acquisition & Management")
-    st.markdown("### Professional financial data collection with validation and storage")
-    
+    st.markdown(
+        "### Professional financial data collection with validation and storage"
+    )
+
+    # Store the manager in session state for access in other functions
+    st.session_state.data_manager = data_manager
+
     # Professional workflow tabs
-    tabs = st.tabs([
-        "📥 Collection",
-        "🔍 Validation", 
-        "💾 Storage",
-        "📊 Analysis",
-        "🔄 Batch Operations"
-    ])
-    
+    tabs = st.tabs(
+        [
+            "📥 Collection",
+            "🔍 Validation",
+            "💾 Storage",
+            "📊 Analysis",
+            "🔄 Batch Operations",
+        ]
+    )
+
     with tabs[0]:
         data_collection_workflow()
-    
+
     with tabs[1]:
         data_validation_workflow()
-    
+
     with tabs[2]:
         storage_management_workflow()
-    
+
     with tabs[3]:
         data_analysis_workflow()
-    
+
     with tabs[4]:
         batch_operations_workflow()
 
 
 def data_collection_workflow():
     """Professional data collection workflow"""
-    
+
     st.header("🎯 Data Collection Workflow")
-    
+
     # Data source configuration
     source_config = create_data_source_selection_form()
-    
+
     if not source_config:
         st.warning("Please configure data source parameters")
         return
-    
+
     # Collection actions
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        if st.button("📥 Start Collection", type="primary", use_container_width=True, key="start_collection_btn"):
+        if st.button(
+            "📥 Start Collection",
+            type="primary",
+            use_container_width=True,
+            key="start_collection_btn",
+        ):
             if source_config["data_source"] == "Yahoo Finance":
                 start_yahoo_finance_collection(source_config)
             elif source_config["data_source"] == "Custom Upload":
                 start_custom_upload_collection(source_config)
-    
+
     with col2:
-        if st.button("⏹️ Stop Collection", use_container_width=True, key="stop_collection_btn"):
+        if st.button(
+            "⏹️ Stop Collection", use_container_width=True, key="stop_collection_btn"
+        ):
             st.session_state.collection_status = {}
             st.success("Collection stopped")
-    
+
     # Display collection status if active
     if st.session_state.collection_status:
         display_collection_status(st.session_state.collection_status)
-    
+
     # Display collected data overview
     if st.session_state.data_cache:
         st.subheader("📊 Collected Data Overview")
-        
+
         # Create summary data
         summary_data = []
-        for symbol, cache_data in st.session_state.data_cache.items():
+        for cache_key, cache_data in st.session_state.data_cache.items():
             data = cache_data["data"]
-            metadata = cache_data["metadata"]
-            
-            summary_data.append({
-                "Symbol": symbol,
-                "Records": len(data),
-                "Columns": len(data.columns),
-                "Start Date": data.index.min().strftime("%Y-%m-%d") if isinstance(data.index, pd.DatetimeIndex) else "N/A",
-                "End Date": data.index.max().strftime("%Y-%m-%d") if isinstance(data.index, pd.DatetimeIndex) else "N/A",
-                "Source": metadata.get("source", "Unknown"),
-                "Collected": metadata.get("collected_at", datetime.now()).strftime("%H:%M:%S")
-            })
-        
+
+            # Extract symbol from cache data
+            symbol = cache_data.get("symbol", cache_key.split("_")[0])
+
+            summary_data.append(
+                {
+                    "Symbol": symbol,
+                    "Records": len(data),
+                    "Columns": len(data.columns),
+                    "Start Date": cache_data.get("date_range", {}).get(
+                        "start",
+                        (
+                            data.index.min().strftime("%Y-%m-%d")
+                            if isinstance(data.index, pd.DatetimeIndex)
+                            else "N/A"
+                        ),
+                    ),
+                    "End Date": cache_data.get("date_range", {}).get(
+                        "end",
+                        (
+                            data.index.max().strftime("%Y-%m-%d")
+                            if isinstance(data.index, pd.DatetimeIndex)
+                            else "N/A"
+                        ),
+                    ),
+                    "Source": cache_data.get("source", "Unknown"),
+                    "Collected": cache_data.get(
+                        "collected_at", datetime.now()
+                    ).strftime("%H:%M:%S"),
+                }
+            )
+
         summary_df = pd.DataFrame(summary_data)
         st.dataframe(summary_df, use_container_width=True)
-        
+
         # Display simple metrics
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
             st.metric("📊 Total Symbols", len(st.session_state.data_cache))
-        
+
         with col2:
-            total_records = sum(len(cache_data["data"]) for cache_data in st.session_state.data_cache.values())
+            total_records = sum(
+                len(cache_data["data"])
+                for cache_data in st.session_state.data_cache.values()
+            )
             st.metric("📈 Total Records", f"{total_records:,}")
-        
+
         with col3:
-            avg_records = total_records / len(st.session_state.data_cache) if st.session_state.data_cache else 0
+            avg_records = (
+                total_records / len(st.session_state.data_cache)
+                if st.session_state.data_cache
+                else 0
+            )
             st.metric("📊 Avg Records/Symbol", f"{avg_records:.0f}")
-        
+
         with col4:
             latest_collection = max(
-                cache_data["metadata"].get("collected_at", datetime.min) 
+                cache_data.get("collected_at", datetime.min)
                 for cache_data in st.session_state.data_cache.values()
             )
             st.metric("🕒 Latest Collection", latest_collection.strftime("%H:%M:%S"))
@@ -173,75 +208,83 @@ def data_collection_workflow():
 
 def data_validation_workflow():
     """Data validation workflow"""
-    
+
     st.header("🔍 Data Validation Workflow")
-    
+
     if not st.session_state.data_cache:
         st.info("📊 Collect data first to enable validation")
         return
-    
+
     # Symbol selection for validation
     selected_symbols = st.multiselect(
         "Select Symbols to Validate",
         options=list(st.session_state.data_cache.keys()),
         default=list(st.session_state.data_cache.keys()),
-        help="Choose symbols to validate"
+        help="Choose symbols to validate",
     )
-    
+
     # Validation options
     col1, col2 = st.columns(2)
-    
+
     with col1:
         validation_level = st.selectbox(
             "Validation Level",
             options=["Basic", "Standard", "Strict"],
             index=1,
-            help="Level of validation strictness"
+            help="Level of validation strictness",
         )
-    
+
     with col2:
         generate_report = st.checkbox(
-            "Generate Report",
-            value=True,
-            help="Generate detailed validation report"
+            "Generate Report", value=True, help="Generate detailed validation report"
         )
-    
+
     # Validation actions
     col_val1, col_val2 = st.columns(2)
-    
+
     with col_val1:
-        if st.button("🔍 Validate Selected", type="primary", use_container_width=True, key="validate_selected_btn"):
+        if st.button(
+            "🔍 Validate Selected",
+            type="primary",
+            use_container_width=True,
+            key="validate_selected_btn",
+        ):
             validate_selected_data(selected_symbols, validation_level, generate_report)
-    
+
     with col_val2:
-        if st.button("🔍 Validate All", use_container_width=True, key="validate_all_btn"):
+        if st.button(
+            "🔍 Validate All", use_container_width=True, key="validate_all_btn"
+        ):
             validate_all_data(validation_level, generate_report)
-    
+
     # Display validation results
-    if st.session_state.validation_cache:
-        for symbol, results in st.session_state.validation_cache.items():
+    if (
+        hasattr(st.session_state, "validation_results")
+        and st.session_state.validation_results
+    ):
+        for symbol, results in st.session_state.validation_results.items():
             with st.expander(f"📊 Validation Results: {symbol}"):
                 display_validation_results(results)
 
 
 def storage_management_workflow():
     """Storage management workflow"""
-    
+
     st.header("💾 Storage Management Workflow")
-    
+
     # Display storage interface
     display_storage_management()
-    
+
     # Auto-save options
     st.subheader("⚙️ Auto-Save Configuration")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         auto_save = st.checkbox("Enable Auto-Save", value=False)
         if auto_save:
             save_interval = st.slider("Save Interval (minutes)", 1, 60, 5)
-    
+
     with col2:
         backup_enabled = st.checkbox("Enable Backup", value=True)
         if backup_enabled:
@@ -250,20 +293,20 @@ def storage_management_workflow():
 
 def data_analysis_workflow():
     """Data analysis and visualization workflow"""
-    
+
     st.header("📊 Data Analysis Workflow")
-    
+
     if not st.session_state.data_cache:
         st.info("� Collect data first to enable analysis")
         return
-    
+
     # Analysis type selection
     analysis_type = st.selectbox(
         "Analysis Type",
         options=["Single Symbol", "Multi-Symbol Comparison", "Data Quality Dashboard"],
-        help="Choose the type of analysis to perform"
+        help="Choose the type of analysis to perform",
     )
-    
+
     if analysis_type == "Single Symbol":
         single_symbol_analysis()
     elif analysis_type == "Multi-Symbol Comparison":
@@ -274,217 +317,160 @@ def data_analysis_workflow():
 
 def batch_operations_workflow():
     """Batch operations workflow"""
-    
+
     st.header("🔄 Batch Operations Workflow")
-    
+
     # Create batch operation interface
     batch_config = create_batch_operation_interface()
-    
+
     if batch_config.get("collect_batch", False):
         execute_batch_collection(batch_config)
-    
+
     if batch_config.get("validate_batch", False):
         execute_batch_validation()
-    
+
     if batch_config.get("save_batch", False):
         execute_batch_save()
 
 
 def start_yahoo_finance_collection(config: Dict[str, Any]):
-    """Start Yahoo Finance data collection"""
-    
+    """Start Yahoo Finance data collection using DataAcquisitionManager"""
+
     try:
-        symbols = config.get("symbols", [])
-        if not symbols:
-            st.error("No symbols specified")
-            return
-        
-        display_computation_status("🔄 Initializing data collection...", 0.1)
-        
-        # Initialize collection status
-        st.session_state.collection_status = {
-            "total_symbols": len(symbols),
-            "collected_symbols": 0,
-            "failed_symbols": 0,
-            "symbol_status": []
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
+        # Transform config to match the manager's expected format
+        symbols_list = config.get("symbols", [])
+        if isinstance(symbols_list, list):
+            symbols_str = ",".join(symbols_list)
+        else:
+            symbols_str = symbols_list
+
+        manager_config = {
+            "symbols": symbols_str,
+            "period": "1y",  # Default period
+            "interval": config.get("interval", "1d"),
         }
-        
-        # Initialize collector
-        collector = YFinanceCollector()
-        
-        progress_container = st.container()
-        
-        for i, symbol in enumerate(symbols):
-            progress = (i + 1) / len(symbols)
-            display_computation_status(f"🔄 Collecting data for {symbol}...", progress)
-            
-            try:
-                # Create DataRequest
-                request = DataRequest(
-                    symbol=symbol,
-                    start_date=config["start_date"].strftime("%Y-%m-%d"),
-                    end_date=config["end_date"].strftime("%Y-%m-%d"),
-                    interval=config["interval"],
-                    auto_adjust=config.get("auto_adjust", True),
-                    prepost=config.get("prepost", False)
-                )
-                
-                data = collector.fetch_data(request)
-                
-                if data is not None and not data.empty:
-                    # Store in session
-                    st.session_state.data_cache[symbol] = {
-                        "data": data,
-                        "metadata": {
-                            "ticker": symbol,
-                            "start_date": config["start_date"],
-                            "end_date": config["end_date"],
-                            "interval": config["interval"],
-                            "collected_at": datetime.now(),
-                            "source": "yahoo_finance"
-                        }
-                    }
-                    
-                    st.session_state.collection_status["collected_symbols"] += 1
-                    st.session_state.collection_status["symbol_status"].append({
-                        "Symbol": symbol,
-                        "Status": "✅ Success",
-                        "Records": len(data),
-                        "Date Range": f"{data.index[0].date()} to {data.index[-1].date()}"
-                    })
-                    
-                else:
-                    raise ValueError("No data returned")
-                
-            except Exception as e:
-                st.session_state.collection_status["failed_symbols"] += 1
-                st.session_state.collection_status["symbol_status"].append({
-                    "Symbol": symbol,
-                    "Status": f"❌ Failed: {str(e)[:50]}",
-                    "Records": 0,
-                    "Date Range": "N/A"
-                })
-        
-        # Final status
-        collected = st.session_state.collection_status["collected_symbols"]
-        total = st.session_state.collection_status["total_symbols"]
-        
-        display_computation_status(
-            f"✅ Collection completed! {collected}/{total} symbols successful",
-            1.0
+
+        # Use the manager to start collection
+        success, message = data_manager.start_yahoo_finance_collection(
+            manager_config, st.session_state
         )
-        
+
+        if success:
+            display_computation_status(f"✅ {message}", 1.0)
+            st.success(message)
+        else:
+            display_computation_status(f"❌ {message}")
+            st.error(message)
+
         st.rerun()
-        
+
     except Exception as e:
-        display_computation_status(f"❌ Collection failed: {str(e)}")
+        error_msg = f"Collection failed: {str(e)}"
+        display_computation_status(f"❌ {error_msg}")
+        st.error(error_msg)
 
 
 def start_custom_upload_collection(config: Dict[str, Any]):
-    """Start custom file upload collection"""
-    
+    """Start custom file upload collection using DataAcquisitionManager"""
+
     try:
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
         uploaded_file = config.get("uploaded_file")
         if not uploaded_file:
             st.warning("Please upload a file")
             return
-        
-        display_computation_status("🔄 Processing uploaded file...", 0.5)
-        
-        # Read uploaded file
-        data = pd.read_csv(
-            uploaded_file,
-            index_col=config.get("index_col", 0),
-            parse_dates=config.get("parse_dates", True),
-            header=config.get("header_row", 0)
+
+        # Use the manager to start upload collection
+        success, message = data_manager.start_custom_upload_collection(
+            [uploaded_file], config, st.session_state
         )
-        
-        # Extract symbol from filename or use default
-        symbol = uploaded_file.name.split('.')[0].upper()
-        
-        # Store in session
-        st.session_state.data_cache[symbol] = {
-            "data": data,
-            "metadata": {
-                "ticker": symbol,
-                "start_date": data.index[0] if len(data) > 0 else None,
-                "end_date": data.index[-1] if len(data) > 0 else None,
-                "interval": "Unknown",
-                "collected_at": datetime.now(),
-                "source": "custom_upload",
-                "filename": uploaded_file.name
-            }
-        }
-        
-        display_computation_status(
-            f"✅ File uploaded successfully! {len(data)} records for {symbol}",
-            1.0
-        )
-        
+
+        if success:
+            display_computation_status(f"✅ {message}", 1.0)
+            st.success(message)
+        else:
+            display_computation_status(f"❌ {message}")
+            st.error(message)
+
         st.rerun()
-        
+
     except Exception as e:
-        display_computation_status(f"❌ Upload failed: {str(e)}")
+        error_msg = f"Upload failed: {str(e)}"
+        display_computation_status(f"❌ {error_msg}")
+        st.error(error_msg)
 
 
-def validate_selected_data(symbols: List[str], validation_level: str, generate_report: bool):
-    """Validate selected symbols"""
-    
+def validate_selected_data(
+    symbols: List[str], validation_level: str, generate_report: bool
+):
+    """Validate selected symbols using DataAcquisitionManager"""
+
     try:
-        from src.data.validators import ValidationLevel
-        
-        # Map validation level
-        level_map = {
-            "Basic": ValidationLevel.BASIC,
-            "Standard": ValidationLevel.STANDARD,
-            "Strict": ValidationLevel.STRICT
-        }
-        
-        validator = DataValidator(validation_level=level_map[validation_level])
-        
-        for symbol in symbols:
-            display_computation_status(f"🔍 Validating {symbol}...", 0.5)
-            
-            data = st.session_state.data_cache[symbol]["data"]
-            validation_result = validator.validate_ohlcv_data(data)
-            
-            # Store validation results
-            st.session_state.validation_cache[symbol] = {
-                "is_valid": validation_result.is_valid,
-                "errors": validation_result.errors,
-                "warnings": validation_result.warnings,
-                "statistics": validation_result.statistics,
-                "quality_score": 1.0 - (len(validation_result.errors) / max(1, len(validation_result.errors) + len(validation_result.warnings) + 10))
-            }
-        
-        display_computation_status(f"✅ Validation completed for {len(symbols)} symbols", 1.0)
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
+        # Use the manager to validate selected data
+        success, message = data_manager.validate_selected_data(
+            symbols, validation_level, generate_report, st.session_state
+        )
+
+        if success:
+            display_computation_status(f"✅ {message}", 1.0)
+            st.success(message)
+        else:
+            display_computation_status(f"❌ {message}")
+            st.error(message)
+
         st.rerun()
-        
+
     except Exception as e:
-        display_computation_status(f"❌ Validation failed: {str(e)}")
+        error_msg = f"Validation failed: {str(e)}"
+        display_computation_status(f"❌ {error_msg}")
+        st.error(error_msg)
 
 
 def validate_all_data(validation_level: str, generate_report: bool):
-    """Validate all cached data"""
-    
-    all_symbols = list(st.session_state.data_cache.keys())
-    validate_selected_data(all_symbols, validation_level, generate_report)
+    """Validate all cached data using DataAcquisitionManager"""
+
+    # Get the data manager from session state
+    data_manager = st.session_state.data_manager
+
+    # Use the manager to validate all data
+    success, message = data_manager.validate_all_data(
+        validation_level, generate_report, st.session_state
+    )
+
+    if success:
+        display_computation_status(f"✅ {message}", 1.0)
+        st.success(message)
+    else:
+        display_computation_status(f"❌ {message}")
+        st.error(message)
 
 
 def single_symbol_analysis():
     """Single symbol analysis"""
-    
-    symbol = st.selectbox(
-        "Select Symbol",
-        options=list(st.session_state.data_cache.keys())
-    )
-    
-    if symbol:
-        data = st.session_state.data_cache[symbol]["data"]
-        
+
+    # Create a mapping of display names to cache keys
+    symbol_options = {}
+    for cache_key, cache_data in st.session_state.data_cache.items():
+        display_name = cache_data.get("symbol", cache_key.split("_")[0])
+        symbol_options[display_name] = cache_key
+
+    selected_symbol = st.selectbox("Select Symbol", options=list(symbol_options.keys()))
+
+    if selected_symbol:
+        cache_key = symbol_options[selected_symbol]
+        data = st.session_state.data_cache[cache_key]["data"]
+
         # Create data quality dashboard
-        create_data_quality_dashboard(data, symbol)
-        
+        create_data_quality_dashboard(data, selected_symbol)
+
         # Price chart
         if "Close" in data.columns:
             st.subheader("📈 Price Chart")
@@ -494,120 +480,126 @@ def single_symbol_analysis():
 
 def multi_symbol_comparison():
     """Multi-symbol comparison analysis"""
-    
-    data_dict = {
-        symbol: cache_data["data"] 
-        for symbol, cache_data in st.session_state.data_cache.items()
-    }
-    
+
+    # Create a mapping with display names
+    data_dict = {}
+    for cache_key, cache_data in st.session_state.data_cache.items():
+        symbol = cache_data.get("symbol", cache_key.split("_")[0])
+        data_dict[symbol] = cache_data["data"]
+
     display_data_comparison(data_dict)
 
 
 def data_quality_analysis():
     """Data quality analysis for all symbols"""
-    
+
     st.subheader("📊 Overall Data Quality Analysis")
-    
+
     quality_data = []
-    for symbol, cache_data in st.session_state.data_cache.items():
+    for cache_key, cache_data in st.session_state.data_cache.items():
         data = cache_data["data"]
-        
-        missing_pct = (data.isnull().sum().sum() / (len(data) * len(data.columns))) * 100
-        
-        quality_data.append({
-            "Symbol": symbol,
-            "Records": len(data),
-            "Columns": len(data.columns),
-            "Missing %": f"{missing_pct:.1f}%",
-            "Date Range": f"{(data.index.max() - data.index.min()).days} days",
-            "Latest Date": data.index.max().strftime("%Y-%m-%d")
-        })
-    
+        symbol = cache_data.get("symbol", cache_key.split("_")[0])
+
+        missing_pct = (
+            data.isnull().sum().sum() / (len(data) * len(data.columns))
+        ) * 100
+
+        quality_data.append(
+            {
+                "Symbol": symbol,
+                "Records": len(data),
+                "Columns": len(data.columns),
+                "Missing %": f"{missing_pct:.1f}%",
+                "Date Range": f"{(data.index.max() - data.index.min()).days} days",
+                "Latest Date": data.index.max().strftime("%Y-%m-%d"),
+            }
+        )
+
     quality_df = pd.DataFrame(quality_data)
     st.dataframe(quality_df, use_container_width=True)
 
 
 def execute_batch_collection(config: Dict[str, Any]):
-    """Execute batch collection"""
-    
-    symbols = config.get("symbol_list", [])
-    if not symbols:
-        st.error("No symbols specified for batch collection")
-        return
-    
-    # Use Yahoo Finance configuration with batch symbols
-    yahoo_config = {
-        "symbols": symbols,
-        "start_date": datetime.now() - timedelta(days=365),
-        "end_date": datetime.now(),
-        "interval": config.get("interval", "1d"),
-        "auto_adjust": True,
-        "prepost": False
-    }
-    
-    start_yahoo_finance_collection(yahoo_config)
+    """Execute batch collection using DataAcquisitionManager"""
+
+    try:
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
+        # Use the manager to execute batch collection
+        success, message = data_manager.execute_batch_collection(
+            config, st.session_state
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Batch collection failed: {str(e)}")
 
 
 def execute_batch_validation():
-    """Execute batch validation"""
-    
-    if not st.session_state.data_cache:
-        st.warning("No data to validate")
-        return
-    
-    validate_all_data("Standard", True)
+    """Execute batch validation using DataAcquisitionManager"""
+
+    try:
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
+        if not st.session_state.data_cache:
+            st.warning("No data to validate")
+            return
+
+        # Use the manager to execute batch validation
+        success, message = data_manager.execute_batch_validation(st.session_state)
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    except Exception as e:
+        st.error(f"Batch validation failed: {str(e)}")
 
 
 def execute_batch_save():
-    """Execute batch save operation"""
-    
+    """Execute batch save operation using DataAcquisitionManager"""
+
     try:
+        # Get the data manager from session state
+        data_manager = st.session_state.data_manager
+
         if not st.session_state.data_cache:
             st.warning("No data to save")
             return
-        
+
         display_computation_status("💾 Saving all data...", 0.5)
-        
-        storage = SQLiteStorage()
-        
-        saved_count = 0
-        for symbol, cache_data in st.session_state.data_cache.items():
-            try:
-                success = storage.store_data(
-                    symbol=symbol,
-                    data=cache_data["data"],
-                    data_source="yahoo",
-                    overwrite=True
-                )
-                if success:
-                    saved_count += 1
-            except Exception as e:
-                st.error(f"Failed to save {symbol}: {str(e)}")
-        
-        display_computation_status(
-            f"✅ Saved {saved_count}/{len(st.session_state.data_cache)} symbols",
-            1.0
-        )
-        
+
+        # Use the manager to execute batch save
+        success, message = data_manager.execute_batch_save(st.session_state)
+
+        if success:
+            display_computation_status(f"✅ {message}", 1.0)
+            st.success(message)
+        else:
+            display_computation_status(f"❌ {message}")
+            st.error(message)
+
     except Exception as e:
-        display_computation_status(f"❌ Batch save failed: {str(e)}")
+        error_msg = f"Batch save failed: {str(e)}"
+        display_computation_status(f"❌ {error_msg}")
+        st.error(error_msg)
 
 
-# Initialize session state
+# Session state is now initialized in main() using DataAcquisitionManager
+# This function is kept for backward compatibility but delegates to the manager
 def initialize_session_state():
-    """Initialize session state for data acquisition"""
-    
-    if "data_cache" not in st.session_state:
-        st.session_state.data_cache = {}
-    
-    if "collection_status" not in st.session_state:
-        st.session_state.collection_status = {}
-    
-    if "validation_cache" not in st.session_state:
-        st.session_state.validation_cache = {}
-    
-    if "storage_status" not in st.session_state:
-        st.session_state.storage_status = {}
+    """Initialize session state for data acquisition (deprecated - use DataAcquisitionManager)"""
+
+    # This function is now handled by DataAcquisitionManager in main()
+    # Kept for backward compatibility
+    pass
 
 
 if __name__ == "__main__":
