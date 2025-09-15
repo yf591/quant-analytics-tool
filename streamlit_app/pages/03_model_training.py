@@ -217,30 +217,32 @@ def show_laboratory_navigation():
                 """
             <div style="padding: 20px; border: 2px solid #2196F3; border-radius: 10px; margin: 10px 0;">
                 <h3>⚡ Training Pipeline Lab</h3>
-                <p><strong>Planned Features:</strong></p>
+                <p><strong>Available Features:</strong></p>
                 <ul>
-                    <li>🔄 Automated training workflows</li>
+                    <li>🔄 Automated multi-model training</li>
                     <li>📊 Model comparison dashboard</li>
                     <li>⚙️ Hyperparameter optimization</li>
+                    <li>🏆 Best model selection</li>
                 </ul>
                 <p><strong>Capabilities:</strong></p>
                 <ul>
                     <li>Multi-model training automation</li>
-                    <li>Advanced hyperparameter search</li>
+                    <li>Real-time progress monitoring</li>
                     <li>Performance benchmarking</li>
-                    <li>Production deployment preparation</li>
+                    <li>Results export and analysis</li>
                 </ul>
             </div>
             """,
                 unsafe_allow_html=True,
             )
 
-            st.button(
-                "🚧 Coming Soon",
-                disabled=True,
+            if st.button(
+                "🚀 Enter Training Pipeline Lab",
+                type="primary",
                 use_container_width=True,
-                key="training_pipeline_coming_soon",
-            )
+                key="enter_training_pipeline_lab",
+            ):
+                st.switch_page("pages/04_Training_Pipeline.py")
 
 
 def show_training_overview():

@@ -72,7 +72,7 @@ def initialize_session_state():
 
     # Page tracking
     if "current_page" not in st.session_state:
-        st.session_state.current_page = "🏠 Home"
+        st.session_state.current_page = "🏠 Main"
 
     # System status tracking
     if "system_status" not in st.session_state:
@@ -309,17 +309,17 @@ def create_enhanced_sidebar():
 
     # Initialize session state for page tracking
     if "current_page" not in st.session_state:
-        st.session_state.current_page = "🏠 Home"
+        st.session_state.current_page = "🏠 Main"
 
     # Page navigation with status indicators
     page_status = {
-        "🏠 Home": ("active", "✅"),
+        "🏠 Main": ("active", "✅"),
         "📈 Data Acquisition": ("active", "✅"),
         "🛠️ Feature Engineering": ("active", "✅"),
         "🧠 Model Training": ("active", "✅"),
+        "🔧 Training Pipeline": ("active", "✅"),
         "🔙 Backtesting": ("active", "✅"),
         "⚖️ Risk Management": ("active", "✅"),
-        "📊 Advanced Analysis": ("development", "🔄"),
     }
 
     page_options = []
@@ -406,22 +406,28 @@ def handle_page_routing():
                 show_cache_management_page()
         else:
             # Handle main pages
-            current_page = st.session_state.get("current_page", "🏠 Home")
+            current_page = st.session_state.get("current_page", "🏠 Main")
 
-            if current_page == "🏠 Home":
+            if current_page == "🏠 Main":
                 show_enhanced_home_page()
             elif current_page == "📈 Data Acquisition":
-                show_data_acquisition_page()
+                st.switch_page("pages/01_data_acquisition.py")
             elif current_page == "🛠️ Feature Engineering":
-                show_feature_engineering_page()
+                st.switch_page("pages/02_feature_engineering.py")
+            elif current_page == "� A Traditional Models":
+                st.switch_page("pages/03_a_traditional_models.py")
+            elif current_page == "🧠 B Deep Learning Models":
+                st.switch_page("pages/03_b_deep_learning_models.py")
+            elif current_page == "� C Advanced Models":
+                st.switch_page("pages/03_c_advanced_models.py")
             elif current_page == "🧠 Model Training":
-                show_model_training_page()
-            elif current_page == "🔙 Backtesting":
-                show_backtesting_page()
+                st.switch_page("pages/03_model_training.py")
+            elif current_page == "🔧 Training Pipeline":
+                st.switch_page("pages/04_Training_Pipeline.py")
+            elif current_page == "� Backtesting":
+                st.switch_page("pages/05_backtesting.py")
             elif current_page == "⚖️ Risk Management":
-                show_risk_management_page()
-            elif current_page == "📊 Advanced Analysis":
-                show_advanced_analysis_page()
+                st.switch_page("pages/06_risk_management.py")
 
     except Exception as e:
         st.error(f"Navigation error: {e}")
