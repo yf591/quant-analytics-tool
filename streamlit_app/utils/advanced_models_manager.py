@@ -11,6 +11,7 @@ import numpy as np
 import warnings
 import uuid
 import traceback
+import streamlit as st
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from sklearn.model_selection import train_test_split
@@ -107,6 +108,23 @@ class AdvancedModelsManager:
                 return False, message, None
 
             X_train, X_test, y_train, y_test = data
+
+            # Convert target for classification tasks
+            if task_type == "classification":
+                # Convert continuous targets to binary classification
+                y_train_binary = (y_train > np.median(y_train)).astype(int)
+                y_test_binary = (y_test > np.median(y_test)).astype(int)
+
+                # Store original for potential regression fallback
+                y_train_orig = y_train.copy()
+                y_test_orig = y_test.copy()
+
+                y_train = y_train_binary
+                y_test = y_test_binary
+
+                st.info(
+                    f"🔄 Converted continuous target to binary classification: {np.unique(y_train)}"
+                )
 
             # Create ensemble configuration with correct parameter names
             config = EnsembleConfig(
@@ -388,9 +406,38 @@ class AdvancedModelsManager:
                     None,
                 )
 
+            # Validate sequence shapes before model creation
+            st.info(
+                f"📊 Sequence shapes - X_train: {X_train_seq.shape}, y_train: {y_train_seq.shape}"
+            )
+
+            # Ensure sequences have the correct 3D shape
+            if len(X_train_seq.shape) != 3:
+                return (
+                    False,
+                    f"❌ Invalid sequence shape: expected 3D (samples, time_steps, features), got {X_train_seq.shape}",
+                    None,
+                )
+
+            # Validate that we have sufficient data for training
+            if X_train_seq.shape[0] < hyperparams.get("batch_size", 32):
+                st.warning(
+                    f"⚠️ Not enough samples ({X_train_seq.shape[0]}) for batch size ({hyperparams.get('batch_size', 32)}). Using smaller batch size."
+                )
+                # Adjust batch_size to be at most half of available samples
+                adjusted_batch_size = max(1, X_train_seq.shape[0] // 2)
+                hyperparams = hyperparams.copy()
+                hyperparams["batch_size"] = adjusted_batch_size
+
             # Create attention model
             input_shape = (X_train_seq.shape[1], X_train_seq.shape[2])
-            output_dim = 1 if task_type == "regression" else len(np.unique(y_train_seq))
+
+            # Determine output dimension based on task type and data
+            if task_type == "classification":
+                unique_labels = np.unique(y_train_seq)
+                output_dim = 1 if len(unique_labels) == 2 else len(unique_labels)
+            else:
+                output_dim = 1
 
             from tensorflow import keras
 
@@ -420,7 +467,12 @@ class AdvancedModelsManager:
             else:
                 model.compile(optimizer="adam", loss="mse", metrics=["mae"])
 
-            # Train model
+            # Train model with adjusted parameters
+            st.info(f"🔧 Training with batch_size: {hyperparams.get('batch_size', 32)}")
+            st.info(
+                f"📊 Final training shapes - X: {X_train_seq.shape}, y: {y_train_seq.shape}"
+            )
+
             history = model.fit(
                 X_train_seq,
                 y_train_seq,
@@ -431,6 +483,11 @@ class AdvancedModelsManager:
             )
 
             # Get predictions
+            st.info("🔮 Making predictions...")
+            st.info(
+                f"📊 Prediction input shapes - X_train: {X_train_seq.shape}, X_test: {X_test_seq.shape}"
+            )
+
             y_train_pred = model.predict(X_train_seq)
             y_test_pred = model.predict(X_test_seq)
 
@@ -514,13 +571,12 @@ class AdvancedModelsManager:
 
             X_train, X_test, y_train, y_test = data
 
-            # Create interpretation configuration
+            # Create interpretation configuration with correct parameter names
             config = InterpretationConfig(
-                max_features=20,
+                max_features_display=20,
                 shap_explainer_type="auto",
-                grid_resolution=100,
-                sample_size=min(1000, len(X_test)),
-                confidence_level=0.95,
+                max_shap_samples=min(1000, len(X_test)),
+                n_repeats=10,
                 random_state=42,
             )
 
@@ -532,6 +588,27 @@ class AdvancedModelsManager:
 
             # Perform analysis
             if interpretation_type == "comprehensive":
+                # Determine task type more accurately based on model info
+                model_info = session_state.model_cache[model_key]
+                actual_task_type = model_info.get("task_type", "classification")
+
+                # Further validate based on target values
+                if actual_task_type == "classification":
+                    # Ensure targets are properly formatted for classification
+                    unique_y_train = np.unique(y_train)
+                    unique_y_test = np.unique(y_test)
+
+                    # If targets are continuous, convert to binary
+                    if len(unique_y_train) > 10 or np.any(
+                        unique_y_train != unique_y_train.astype(int)
+                    ):
+                        st.warning(
+                            "Converting continuous targets to binary for interpretation analysis"
+                        )
+                        y_train_binary = (y_train > np.median(y_train)).astype(int)
+                        y_test_binary = (y_test > np.median(y_test)).astype(int)
+                        y_train, y_test = y_train_binary, y_test_binary
+
                 results = interpreter.comprehensive_analysis(
                     model=model,
                     X_train=X_train,
@@ -539,15 +616,23 @@ class AdvancedModelsManager:
                     y_train=y_train,
                     y_test=y_test,
                     feature_names=feature_names,
-                    task_type=(
-                        "classification"
-                        if hasattr(model, "predict_proba")
-                        else "regression"
-                    ),
+                    task_type=actual_task_type,
                 )
             else:
                 # Individual analysis components
                 results = {}
+
+                # Determine task type and ensure proper target format
+                model_info = session_state.model_cache[model_key]
+                actual_task_type = model_info.get("task_type", "classification")
+
+                # Validate and convert targets if needed
+                if actual_task_type == "classification":
+                    unique_y_test = np.unique(y_test)
+                    if len(unique_y_test) > 10 or np.any(
+                        unique_y_test != unique_y_test.astype(int)
+                    ):
+                        y_test = (y_test > np.median(y_test)).astype(int)
 
                 if interpretation_type == "feature_importance":
                     importance_analyzer = FeatureImportanceAnalyzer(config)
@@ -557,9 +642,14 @@ class AdvancedModelsManager:
                                 model, feature_names
                             )
                         )
+
+                    # Use appropriate scoring for task type
+                    scoring = (
+                        "accuracy" if actual_task_type == "classification" else "r2"
+                    )
                     results["permutation_importance"] = (
                         importance_analyzer.analyze_permutation_importance(
-                            model, X_test, y_test, feature_names
+                            model, X_test, y_test, feature_names, scoring=scoring
                         )
                     )
 
@@ -737,15 +827,34 @@ class AdvancedModelsManager:
     def _create_sequences(
         self, X: np.ndarray, y: np.ndarray, sequence_length: int
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Create sequences for time series models"""
+        """Create sequences for time series models with proper shape validation"""
+
+        # Ensure inputs are 2D arrays
+        if len(X.shape) == 1:
+            X = X.reshape(-1, 1)
+        if len(y.shape) == 1:
+            y = y.reshape(-1, 1)
 
         X_seq, y_seq = [], []
 
         for i in range(len(X) - sequence_length + 1):
+            # Create sequence of features
             X_seq.append(X[i : i + sequence_length])
+            # Take target at the end of sequence
             y_seq.append(y[i + sequence_length - 1])
 
-        return np.array(X_seq), np.array(y_seq)
+        X_seq = np.array(X_seq)
+        y_seq = np.array(y_seq)
+
+        # Ensure proper 3D shape for sequences: (samples, time_steps, features)
+        if len(X_seq.shape) == 2:
+            X_seq = X_seq.reshape(X_seq.shape[0], X_seq.shape[1], 1)
+
+        # Ensure y_seq is 1D
+        if len(y_seq.shape) > 1:
+            y_seq = y_seq.squeeze()
+
+        return X_seq, y_seq
 
     def _evaluate_model(
         self,

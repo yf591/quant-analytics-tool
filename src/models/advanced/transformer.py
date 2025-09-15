@@ -41,12 +41,18 @@ def prepare_financial_data(
     classification: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[object]]:
     """Prepare financial data for transformer training."""
-    # Simple implementation
+    from sklearn.preprocessing import StandardScaler
+
+    # Extract features and target
     features = df.drop(columns=[target_col]).values
     target = df[target_col].values
 
+    # Initialize and fit scaler
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
+
     # Create sequences for features and target
-    X_seq, _ = create_sequences(features, sequence_length)
+    X_seq, _ = create_sequences(features_scaled, sequence_length)
     _, y_seq = create_sequences(target.reshape(-1, 1), sequence_length)
 
     # For classification, we might want to use only the last value in sequence
@@ -54,9 +60,6 @@ def prepare_financial_data(
         y_processed = y_seq[:, -1, 0]  # Take last value of each sequence
     else:
         y_processed = y_seq.squeeze()
-
-    # Create a dummy scaler (for interface compatibility)
-    scaler = None
 
     return X_seq, y_processed, scaler
 
@@ -240,7 +243,9 @@ class TransformerClassifier(BaseFinancialModel):
         super().__init__()
         self.config = config or TransformerConfig()
         self.model = None
-        self.scaler = None
+        from sklearn.preprocessing import StandardScaler
+
+        self.scaler = StandardScaler()
         self.is_fitted = False
 
     def _build_model(self) -> Any:
@@ -269,9 +274,15 @@ class TransformerClassifier(BaseFinancialModel):
             # Find target column name (should be in X DataFrame)
             target_col = None
             for col in X.columns:
-                if any(keyword in col.lower() for keyword in ["target", "label", "y"]):
-                    target_col = col
-                    break
+                # Handle both string and integer column names safely
+                try:
+                    col_str = str(col).lower() if col is not None else ""
+                    if any(keyword in col_str for keyword in ["target", "label", "y"]):
+                        target_col = col
+                        break
+                except (AttributeError, TypeError):
+                    # Skip columns that can't be converted to string
+                    continue
 
             if target_col is None:
                 # If no obvious target column, use the last column or create one
@@ -359,10 +370,25 @@ class TransformerClassifier(BaseFinancialModel):
             raise ValueError("Model must be fitted before making predictions")
 
         try:
-            # Prepare sequences
-            X_seq = create_sequences(
-                self.scaler.transform(X), self.config.sequence_length
+            # Convert DataFrame to numpy array if needed
+            if isinstance(X, pd.DataFrame):
+                X_values = X.values
+            else:
+                X_values = X
+
+            # Check if we have enough data for sequences
+            if len(X_values) < self.config.sequence_length + 1:
+                raise ValueError(
+                    f"Input data has {len(X_values)} samples, but need at least {self.config.sequence_length + 1} for sequence length {self.config.sequence_length}"
+                )
+
+            # Prepare sequences - only take X_seq, ignore y
+            X_seq, _ = create_sequences(
+                self.scaler.transform(X_values), self.config.sequence_length
             )
+
+            if X_seq.shape[0] == 0:
+                raise ValueError("No sequences could be created from the input data")
 
             # Make predictions
             predictions = self.model.predict(X_seq)
@@ -382,9 +408,25 @@ class TransformerClassifier(BaseFinancialModel):
             raise ValueError("Model must be fitted before making predictions")
 
         try:
-            X_seq = create_sequences(
-                self.scaler.transform(X), self.config.sequence_length
+            # Convert DataFrame to numpy array if needed
+            if isinstance(X, pd.DataFrame):
+                X_values = X.values
+            else:
+                X_values = X
+
+            # Check if we have enough data for sequences
+            if len(X_values) < self.config.sequence_length + 1:
+                raise ValueError(
+                    f"Input data has {len(X_values)} samples, but need at least {self.config.sequence_length + 1} for sequence length {self.config.sequence_length}"
+                )
+
+            # Prepare sequences - only take X_seq, ignore y
+            X_seq, _ = create_sequences(
+                self.scaler.transform(X_values), self.config.sequence_length
             )
+
+            if X_seq.shape[0] == 0:
+                raise ValueError("No sequences could be created from the input data")
 
             predictions = self.model.predict(X_seq)
 
@@ -406,7 +448,9 @@ class TransformerRegressor(BaseFinancialModel):
         super().__init__()
         self.config = config or TransformerConfig()
         self.model = None
-        self.scaler = None
+        from sklearn.preprocessing import StandardScaler
+
+        self.scaler = StandardScaler()
         self.is_fitted = False
 
     def _build_model(self) -> Any:
@@ -435,9 +479,15 @@ class TransformerRegressor(BaseFinancialModel):
             # Find target column name (should be in X DataFrame)
             target_col = None
             for col in X.columns:
-                if any(keyword in col.lower() for keyword in ["target", "label", "y"]):
-                    target_col = col
-                    break
+                # Handle both string and integer column names safely
+                try:
+                    col_str = str(col).lower() if col is not None else ""
+                    if any(keyword in col_str for keyword in ["target", "label", "y"]):
+                        target_col = col
+                        break
+                except (AttributeError, TypeError):
+                    # Skip columns that can't be converted to string
+                    continue
 
             if target_col is None:
                 # If no obvious target column, use the last column or create one
@@ -519,9 +569,25 @@ class TransformerRegressor(BaseFinancialModel):
             raise ValueError("Model must be fitted before making predictions")
 
         try:
-            X_seq = create_sequences(
-                self.scaler.transform(X), self.config.sequence_length
+            # Convert DataFrame to numpy array if needed
+            if isinstance(X, pd.DataFrame):
+                X_values = X.values
+            else:
+                X_values = X
+
+            # Check if we have enough data for sequences
+            if len(X_values) < self.config.sequence_length + 1:
+                raise ValueError(
+                    f"Input data has {len(X_values)} samples, but need at least {self.config.sequence_length + 1} for sequence length {self.config.sequence_length}"
+                )
+
+            # Prepare sequences - only take X_seq, ignore y
+            X_seq, _ = create_sequences(
+                self.scaler.transform(X_values), self.config.sequence_length
             )
+
+            if X_seq.shape[0] == 0:
+                raise ValueError("No sequences could be created from the input data")
 
             predictions = self.model.predict(X_seq)
             return predictions.flatten()
