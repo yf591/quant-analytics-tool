@@ -142,17 +142,17 @@ def show_laboratory_navigation():
                 st.switch_page("pages/03_a_traditional_models.py")
 
     with col2:
-        # Future laboratories placeholder
+        # Deep Learning Laboratory
         with st.container():
             st.markdown(
                 """
             <div style="padding: 20px; border: 2px solid #FF9800; border-radius: 10px; margin: 10px 0;">
                 <h3>🧠 Deep Learning Models Lab</h3>
-                <p><strong>Planned Models:</strong></p>
+                <p><strong>Available Models:</strong></p>
                 <ul>
-                    <li>🧠 Neural Networks (MLP)</li>
-                    <li>🔄 LSTM Networks</li>
-                    <li>📊 Convolutional Networks</li>
+                    <li>🔄 LSTM Networks (Classification/Regression)</li>
+                    <li>⚡ GRU Networks (Gated Recurrent Units)</li>
+                    <li>📊 Bidirectional Architectures</li>
                 </ul>
                 <p><strong>Features:</strong></p>
                 <ul>
@@ -166,12 +166,13 @@ def show_laboratory_navigation():
                 unsafe_allow_html=True,
             )
 
-            st.button(
-                "🚧 Coming Soon",
-                disabled=True,
+            if st.button(
+                "🚀 Enter Deep Learning Lab",
+                type="primary",
                 use_container_width=True,
-                key="deep_learning_coming_soon",
-            )
+                key="enter_deep_learning_lab",
+            ):
+                st.switch_page("pages/03_b_deep_learning_models.py")
 
     # Additional laboratories row
     col3, col4 = st.columns(2)
@@ -335,8 +336,8 @@ def show_training_overview():
                 ],
             },
             "🧠 Deep Learning": {
-                "Status": "🚧 Coming Soon",
-                "Models": ["Neural Networks", "LSTM", "CNN"],
+                "Status": "✅ Available",
+                "Models": ["LSTM Networks", "GRU Networks", "Bidirectional RNN"],
                 "Tasks": ["Time series prediction", "Pattern recognition"],
                 "Features": [
                     "Architecture design",
