@@ -182,31 +182,34 @@ def show_laboratory_navigation():
             st.markdown(
                 """
             <div style="padding: 20px; border: 2px solid #9C27B0; border-radius: 10px; margin: 10px 0;">
-                <h3>🚀 Advanced Models Lab</h3>
-                <p><strong>Planned Models:</strong></p>
+                <h3>🧠 Advanced Models Lab</h3>
+                <p><strong>Available Models:</strong></p>
                 <ul>
-                    <li>🤖 Transformer Networks</li>
-                    <li>⚡ AutoML Systems</li>
-                    <li>🔗 Ensemble Methods</li>
+                    <li>🎯 Ensemble Methods (Financial RF, Bagging, Stacking)</li>
+                    <li>🤖 Transformer Networks (Attention-based)</li>
+                    <li>🧠 Attention Mechanisms (Multi-head, Temporal)</li>
+                    <li>🎖️ Meta-Labeling (Position Sizing)</li>
+                    <li>🔍 Model Interpretation (SHAP, Feature Importance)</li>
                 </ul>
                 <p><strong>Features:</strong></p>
                 <ul>
-                    <li>State-of-the-art architectures</li>
-                    <li>Automated model selection</li>
-                    <li>Advanced ensemble techniques</li>
-                    <li>Model interpretability tools</li>
+                    <li>Cutting-edge financial ML techniques</li>
+                    <li>Advanced ensemble methods</li>
+                    <li>Model explainability tools</li>
+                    <li>Meta-labeling strategies</li>
                 </ul>
             </div>
             """,
                 unsafe_allow_html=True,
             )
 
-            st.button(
-                "🚧 Coming Soon",
-                disabled=True,
+            if st.button(
+                "🚀 Enter Advanced Models Lab",
+                type="primary",
                 use_container_width=True,
-                key="advanced_models_coming_soon",
-            )
+                key="enter_advanced_lab",
+            ):
+                st.switch_page("pages/03_c_advanced_models.py")
 
     with col4:
         with st.container():

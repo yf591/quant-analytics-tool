@@ -93,6 +93,95 @@ class TripleBarrierLabeling:
         if max_holding_period is None:
             max_holding_period = self.config.max_holding_period
 
+        results = []
+
+        for event_time in events.index:
+            if event_time not in prices.index:
+                continue
+
+            event_price = prices.loc[event_time]
+            event_idx = prices.index.get_loc(event_time)
+
+            # Define barriers
+            upper_barrier = event_price * (1 + profit_target)
+            lower_barrier = event_price * (1 - stop_loss)
+
+            # Look forward for barrier hits
+            future_prices = prices.iloc[
+                event_idx + 1 : event_idx + 1 + max_holding_period
+            ]
+
+            if len(future_prices) == 0:
+                continue
+
+            # Check for barrier hits
+            upper_hit = future_prices >= upper_barrier
+            lower_hit = future_prices <= lower_barrier
+
+            # Find first hit
+            upper_hit_time = upper_hit.idxmax() if upper_hit.any() else None
+            lower_hit_time = lower_hit.idxmax() if lower_hit.any() else None
+
+            # Determine exit
+            exit_time = None
+            exit_price = None
+            label = 0
+            barrier_hit = "time"
+
+            if upper_hit_time is not None and lower_hit_time is not None:
+                # Both barriers hit, take the first one
+                if upper_hit_time <= lower_hit_time:
+                    exit_time = upper_hit_time
+                    exit_price = prices.loc[exit_time]
+                    label = 1
+                    barrier_hit = "upper"
+                else:
+                    exit_time = lower_hit_time
+                    exit_price = prices.loc[exit_time]
+                    label = -1
+                    barrier_hit = "lower"
+            elif upper_hit_time is not None:
+                exit_time = upper_hit_time
+                exit_price = prices.loc[exit_time]
+                label = 1
+                barrier_hit = "upper"
+            elif lower_hit_time is not None:
+                exit_time = lower_hit_time
+                exit_price = prices.loc[exit_time]
+                label = -1
+                barrier_hit = "lower"
+            else:
+                # Time barrier hit
+                exit_time = future_prices.index[-1]
+                exit_price = future_prices.iloc[-1]
+                # Label based on final return
+                final_return = (exit_price - event_price) / event_price
+                label = 1 if final_return > 0 else -1
+                barrier_hit = "time"
+
+            return_val = (exit_price - event_price) / event_price
+
+            results.append(
+                {
+                    "event_time": event_time,
+                    "event_price": event_price,
+                    "exit_time": exit_time,
+                    "exit_price": exit_price,
+                    "return": return_val,
+                    "label": label,
+                    "barrier_hit": barrier_hit,
+                    "holding_period": (
+                        (exit_time - event_time).days
+                        if exit_time
+                        else max_holding_period
+                    ),
+                }
+            )
+
+        return pd.DataFrame(results).set_index("event_time")
+        if max_holding_period is None:
+            max_holding_period = self.config.max_holding_period
+
         # Initialize results
         results = []
 

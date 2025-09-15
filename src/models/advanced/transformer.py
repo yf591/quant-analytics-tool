@@ -35,15 +35,30 @@ def create_sequences(
 
 
 def prepare_financial_data(
-    df: pd.DataFrame, target_col: str, sequence_length: int
-) -> Tuple[np.ndarray, np.ndarray]:
+    df: pd.DataFrame,
+    target_col: str,
+    sequence_length: int,
+    classification: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, Optional[object]]:
     """Prepare financial data for transformer training."""
     # Simple implementation
     features = df.drop(columns=[target_col]).values
     target = df[target_col].values
-    return create_sequences(features, sequence_length), create_sequences(
-        target.reshape(-1, 1), sequence_length
-    )
+
+    # Create sequences for features and target
+    X_seq, _ = create_sequences(features, sequence_length)
+    _, y_seq = create_sequences(target.reshape(-1, 1), sequence_length)
+
+    # For classification, we might want to use only the last value in sequence
+    if classification:
+        y_processed = y_seq[:, -1, 0]  # Take last value of each sequence
+    else:
+        y_processed = y_seq.squeeze()
+
+    # Create a dummy scaler (for interface compatibility)
+    scaler = None
+
+    return X_seq, y_processed, scaler
 
 
 @dataclass
@@ -251,9 +266,30 @@ class TransformerClassifier(BaseFinancialModel):
             ModelResults object with training metrics
         """
         try:
+            # Find target column name (should be in X DataFrame)
+            target_col = None
+            for col in X.columns:
+                if any(keyword in col.lower() for keyword in ["target", "label", "y"]):
+                    target_col = col
+                    break
+
+            if target_col is None:
+                # If no obvious target column, use the last column or create one
+                if len(X.columns) > 1:
+                    target_col = X.columns[-1]
+                else:
+                    # Add y as target column
+                    X_with_target = X.copy()
+                    target_col = "target"
+                    X_with_target[target_col] = y
+                    X = X_with_target
+
             # Prepare data
             X_seq, y_processed, self.scaler = prepare_financial_data(
-                X, y, sequence_length=self.config.sequence_length, classification=True
+                X,
+                target_col,
+                sequence_length=self.config.sequence_length,
+                classification=True,
             )
 
             # Determine number of classes
@@ -396,9 +432,30 @@ class TransformerRegressor(BaseFinancialModel):
             ModelResults object with training metrics
         """
         try:
+            # Find target column name (should be in X DataFrame)
+            target_col = None
+            for col in X.columns:
+                if any(keyword in col.lower() for keyword in ["target", "label", "y"]):
+                    target_col = col
+                    break
+
+            if target_col is None:
+                # If no obvious target column, use the last column or create one
+                if len(X.columns) > 1:
+                    target_col = X.columns[-1]
+                else:
+                    # Add y as target column
+                    X_with_target = X.copy()
+                    target_col = "target"
+                    X_with_target[target_col] = y
+                    X = X_with_target
+
             # Prepare data
             X_seq, y_processed, self.scaler = prepare_financial_data(
-                X, y, sequence_length=self.config.sequence_length, classification=False
+                X,
+                target_col,
+                sequence_length=self.config.sequence_length,
+                classification=False,
             )
 
             # Build model
