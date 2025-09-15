@@ -281,16 +281,37 @@ quant-analytics-tool/
 │   ├── 📁 pages/                  # Streamlit pages
 │   │   ├── 01_data_acquisition.py # Data acquisition page
 │   │   ├── 02_feature_engineering.py # Feature engineering page
+│   │   ├── 03_a_traditional_models.py # Traditional ML models page
+│   │   ├── 03_b_deep_learning_models.py # Deep learning models page
+│   │   ├── 03_c_advanced_models.py # Advanced models page
 │   │   ├── 03_model_training.py   # Model training page
-│   │   ├── 04_backtesting.py      # Backtesting page
-│   │   └── 05_analysis.py         # Results analysis page
+│   │   ├── 04_Training_Pipeline.py # Training pipeline page
+│   │   ├── 05_backtesting.py      # Backtesting page
+│   │   └── 06_risk_management.py  # Risk management page
 │   ├── 📁 components/             # Reusable UI components
-│   │   ├── sidebar.py             # Sidebar components
+│   │   ├── __init__.py            # Package initialization
+│   │   ├── backtest_widgets.py    # Backtesting widgets
 │   │   ├── charts.py              # Chart components
-│   │   └── forms.py               # Form components
+│   │   ├── data_display.py        # Data display components
+│   │   ├── data_management.py     # Data management widgets
+│   │   ├── forms.py               # Form components
+│   │   └── model_widgets.py       # Model widgets
 │   ├── 📁 utils/                  # Streamlit utilities
-│   │   ├── session_state.py       # Session state management
-│   │   └── helpers.py             # UI helper functions
+│   │   ├── __init__.py            # Package initialization
+│   │   ├── advanced_models_manager.py # Advanced models management
+│   │   ├── analysis_utils.py      # Analysis utilities
+│   │   ├── backtest_utils.py      # Backtesting utilities
+│   │   ├── data_utils.py          # Data utilities
+│   │   ├── deep_learning_manager.py # Deep learning model manager
+│   │   ├── feature_utils.py       # Feature engineering utilities
+│   │   ├── model_utils.py         # Model utilities
+│   │   ├── pipeline_utils.py      # Pipeline utilities
+│   │   └── simple_model_manager.py # Simple model manager
+│   ├── 📁 utils_pages/            # Page utilities
+│   │   ├── cache_management.py    # Cache management
+│   │   ├── data_explorer.py       # Data exploration utilities
+│   │   ├── documentation.py       # Documentation helpers
+│   │   └── settings.py            # Settings management
 │   └── main.py                    # Main application entry
 ├── 📁 tests/                      # Test suite
 │   ├── conftest.py                # Pytest configuration
