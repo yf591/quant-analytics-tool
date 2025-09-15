@@ -223,63 +223,62 @@ def show_random_forest_lab(feature_key: str):
         "Explore Random Forest models with comprehensive hyperparameter tuning and analysis."
     )
 
-    # Main layout
-    col_control, col_display = st.columns([1, 2])
+    # Control Panel Section
+    st.subheader("🎛️ Control Panel")
 
-    with col_control:
-        st.subheader("🎛️ Control Panel")
+    # Task type selection
+    task_type = st.radio(
+        "Task Type:",
+        options=["Classification", "Regression"],
+        index=0,
+        help="Select the type of machine learning task",
+    )
 
-        # Task type selection
-        task_type = st.radio(
-            "Task Type:",
-            options=["Classification", "Regression"],
-            index=0,
-            help="Select the type of machine learning task",
+    # Model selection based on task type
+    model_class = (
+        QuantRandomForestClassifier
+        if task_type == "Classification"
+        else QuantRandomForestRegressor
+    )
+
+    st.markdown("---")
+
+    # Hyperparameters section
+    st.subheader("🔧 Hyperparameters")
+    hyperparams = get_random_forest_hyperparameters()
+
+    st.markdown("---")
+
+    # Training configuration
+    st.subheader("⚙️ Training Settings")
+    training_config = get_training_configuration()
+
+    st.markdown("---")
+
+    # Training button
+    if st.button(
+        "🚀 Train Random Forest",
+        type="primary",
+        use_container_width=True,
+        key="train_rf",
+    ):
+        train_traditional_model(
+            feature_key=feature_key,
+            model_class=model_class,
+            model_name="RandomForest",
+            task_type=task_type.lower(),
+            hyperparams=hyperparams,
+            training_config=training_config,
         )
 
-        # Model selection based on task type
-        model_class = (
-            QuantRandomForestClassifier
-            if task_type == "Classification"
-            else QuantRandomForestRegressor
-        )
+    st.markdown("---")
 
-        st.markdown("---")
+    # Results & Analysis Section (moved below training controls)
+    st.subheader("📊 Results & Analysis")
 
-        # Hyperparameters section
-        st.subheader("🔧 Hyperparameters")
-        hyperparams = get_random_forest_hyperparameters()
-
-        st.markdown("---")
-
-        # Training configuration
-        st.subheader("⚙️ Training Settings")
-        training_config = get_training_configuration()
-
-        st.markdown("---")
-
-        # Training button
-        if st.button(
-            "🚀 Train Random Forest",
-            type="primary",
-            use_container_width=True,
-            key="train_rf",
-        ):
-            train_traditional_model(
-                feature_key=feature_key,
-                model_class=model_class,
-                model_name="RandomForest",
-                task_type=task_type.lower(),
-                hyperparams=hyperparams,
-                training_config=training_config,
-            )
-
-    with col_display:
-        st.subheader("📊 Results & Analysis")
-
-        # Display results if available
-        model_key = f"RandomForest_{task_type.lower()}_{feature_key}"
-        display_model_results(model_key, "Random Forest")
+    # Display results if available
+    model_key = f"RandomForest_{task_type.lower()}_{feature_key}"
+    display_model_results(model_key, "Random Forest")
 
 
 def show_xgboost_lab(feature_key: str):
@@ -288,64 +287,63 @@ def show_xgboost_lab(feature_key: str):
     st.header("🚀 XGBoost Laboratory")
     st.markdown("Explore XGBoost models with advanced gradient boosting techniques.")
 
-    # Main layout
-    col_control, col_display = st.columns([1, 2])
+    # Control Panel Section
+    st.subheader("🎛️ Control Panel")
 
-    with col_control:
-        st.subheader("🎛️ Control Panel")
+    # Task type selection
+    task_type = st.radio(
+        "Task Type:",
+        options=["Classification", "Regression"],
+        index=0,
+        help="Select the type of machine learning task",
+        key="xgb_task_type",
+    )
 
-        # Task type selection
-        task_type = st.radio(
-            "Task Type:",
-            options=["Classification", "Regression"],
-            index=0,
-            help="Select the type of machine learning task",
-            key="xgb_task_type",
+    # Model selection based on task type
+    model_class = (
+        QuantXGBoostClassifier
+        if task_type == "Classification"
+        else QuantXGBoostRegressor
+    )
+
+    st.markdown("---")
+
+    # Hyperparameters section
+    st.subheader("🔧 Hyperparameters")
+    hyperparams = get_xgboost_hyperparameters()
+
+    st.markdown("---")
+
+    # Training configuration
+    st.subheader("⚙️ Training Settings")
+    training_config = get_training_configuration(key_prefix="xgb")
+
+    st.markdown("---")
+
+    # Training button
+    if st.button(
+        "🚀 Train XGBoost",
+        type="primary",
+        use_container_width=True,
+        key="train_xgb",
+    ):
+        train_traditional_model(
+            feature_key=feature_key,
+            model_class=model_class,
+            model_name="XGBoost",
+            task_type=task_type.lower(),
+            hyperparams=hyperparams,
+            training_config=training_config,
         )
 
-        # Model selection based on task type
-        model_class = (
-            QuantXGBoostClassifier
-            if task_type == "Classification"
-            else QuantXGBoostRegressor
-        )
+    st.markdown("---")
 
-        st.markdown("---")
+    # Results & Analysis Section (moved below training controls)
+    st.subheader("📊 Results & Analysis")
 
-        # Hyperparameters section
-        st.subheader("🔧 Hyperparameters")
-        hyperparams = get_xgboost_hyperparameters()
-
-        st.markdown("---")
-
-        # Training configuration
-        st.subheader("⚙️ Training Settings")
-        training_config = get_training_configuration(key_prefix="xgb")
-
-        st.markdown("---")
-
-        # Training button
-        if st.button(
-            "🚀 Train XGBoost",
-            type="primary",
-            use_container_width=True,
-            key="train_xgb",
-        ):
-            train_traditional_model(
-                feature_key=feature_key,
-                model_class=model_class,
-                model_name="XGBoost",
-                task_type=task_type.lower(),
-                hyperparams=hyperparams,
-                training_config=training_config,
-            )
-
-    with col_display:
-        st.subheader("📊 Results & Analysis")
-
-        # Display results if available
-        model_key = f"XGBoost_{task_type.lower()}_{feature_key}"
-        display_model_results(model_key, "XGBoost")
+    # Display results if available
+    model_key = f"XGBoost_{task_type.lower()}_{feature_key}"
+    display_model_results(model_key, "XGBoost")
 
 
 def show_svm_lab(feature_key: str):
@@ -356,59 +354,58 @@ def show_svm_lab(feature_key: str):
         "Explore Support Vector Machines with kernel methods and advanced regularization."
     )
 
-    # Main layout
-    col_control, col_display = st.columns([1, 2])
+    # Control Panel Section
+    st.subheader("🎛️ Control Panel")
 
-    with col_control:
-        st.subheader("🎛️ Control Panel")
+    # Task type selection
+    task_type = st.radio(
+        "Task Type:",
+        options=["Classification", "Regression"],
+        index=0,
+        help="Select the type of machine learning task",
+        key="svm_task_type",
+    )
 
-        # Task type selection
-        task_type = st.radio(
-            "Task Type:",
-            options=["Classification", "Regression"],
-            index=0,
-            help="Select the type of machine learning task",
-            key="svm_task_type",
+    # Model selection based on task type
+    model_class = (
+        QuantSVMClassifier if task_type == "Classification" else QuantSVMRegressor
+    )
+
+    st.markdown("---")
+
+    # Hyperparameters section
+    st.subheader("🔧 Hyperparameters")
+    hyperparams = get_svm_hyperparameters()
+
+    st.markdown("---")
+
+    # Training configuration
+    st.subheader("⚙️ Training Settings")
+    training_config = get_training_configuration(key_prefix="svm")
+
+    st.markdown("---")
+
+    # Training button
+    if st.button(
+        "🚀 Train SVM", type="primary", use_container_width=True, key="train_svm"
+    ):
+        train_traditional_model(
+            feature_key=feature_key,
+            model_class=model_class,
+            model_name="SVM",
+            task_type=task_type.lower(),
+            hyperparams=hyperparams,
+            training_config=training_config,
         )
 
-        # Model selection based on task type
-        model_class = (
-            QuantSVMClassifier if task_type == "Classification" else QuantSVMRegressor
-        )
+    st.markdown("---")
 
-        st.markdown("---")
+    # Results & Analysis Section (moved below training controls)
+    st.subheader("📊 Results & Analysis")
 
-        # Hyperparameters section
-        st.subheader("🔧 Hyperparameters")
-        hyperparams = get_svm_hyperparameters()
-
-        st.markdown("---")
-
-        # Training configuration
-        st.subheader("⚙️ Training Settings")
-        training_config = get_training_configuration(key_prefix="svm")
-
-        st.markdown("---")
-
-        # Training button
-        if st.button(
-            "🚀 Train SVM", type="primary", use_container_width=True, key="train_svm"
-        ):
-            train_traditional_model(
-                feature_key=feature_key,
-                model_class=model_class,
-                model_name="SVM",
-                task_type=task_type.lower(),
-                hyperparams=hyperparams,
-                training_config=training_config,
-            )
-
-    with col_display:
-        st.subheader("📊 Results & Analysis")
-
-        # Display results if available
-        model_key = f"SVM_{task_type.lower()}_{feature_key}"
-        display_model_results(model_key, "SVM")
+    # Display results if available
+    model_key = f"SVM_{task_type.lower()}_{feature_key}"
+    display_model_results(model_key, "SVM")
 
 
 def get_random_forest_hyperparameters() -> Dict[str, Any]:
