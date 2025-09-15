@@ -49,32 +49,86 @@ class SimpleModelTrainingManager:
         """
 
         try:
+            # Debug: Print session state info
+            print(f"Debug: feature_key = {feature_key}")
+            print(
+                f"Debug: feature_cache keys = {list(session_state.feature_cache.keys()) if hasattr(session_state, 'feature_cache') else 'No feature_cache'}"
+            )
+
             # Get feature data
+            if not hasattr(session_state, "feature_cache"):
+                return (
+                    False,
+                    "❌ No feature_cache found in session_state. Please run Feature Engineering first.",
+                    None,
+                )
+
+            if not session_state.feature_cache:
+                return (
+                    False,
+                    "❌ Feature cache is empty. Please generate features in Feature Engineering page first.",
+                    None,
+                )
+
             if feature_key not in session_state.feature_cache:
-                return False, f"Feature dataset '{feature_key}' not found", None
+                available_keys = list(session_state.feature_cache.keys())
+                return (
+                    False,
+                    f"❌ Feature dataset '{feature_key}' not found. Available datasets: {available_keys}",
+                    None,
+                )
 
             dataset_info = session_state.feature_cache[feature_key]
+            print(f"Debug: dataset_info type = {type(dataset_info)}")
 
-            # Extract features and target
-            if "features" not in dataset_info:
-                return False, "Dataset missing features data", None
-
-            features_df = dataset_info["features"]
+            # Handle different data formats from feature engineering
+            if isinstance(dataset_info, pd.DataFrame):
+                # Direct DataFrame from feature engineering
+                features_df = dataset_info
+                print(f"Debug: Using DataFrame directly, shape: {features_df.shape}")
+            elif isinstance(dataset_info, dict) and "features" in dataset_info:
+                # Dictionary format with 'features' key
+                features_df = dataset_info["features"]
+                print(f"Debug: Using features from dict, shape: {features_df.shape}")
+            else:
+                # Unsupported format
+                if isinstance(dataset_info, dict):
+                    available_keys = list(dataset_info.keys())
+                    return (
+                        False,
+                        f"❌ Dataset has unexpected structure. Available keys: {available_keys}",
+                        None,
+                    )
+                else:
+                    return (
+                        False,
+                        f"❌ Dataset is not a DataFrame or dictionary. Type: {type(dataset_info)}",
+                        None,
+                    )
 
             # Create a simple target if not provided
-            if "target" in dataset_info:
+            target = None
+            if isinstance(dataset_info, dict) and "target" in dataset_info:
                 target = dataset_info["target"]
+                print(f"Debug: Using existing target from dict")
             else:
-                # Create a simple target based on returns
-                if "returns" in features_df.columns:
-                    target = (features_df["returns"] > 0).astype(int)
-                    target.name = "direction"
-                elif "close" in features_df.columns:
-                    returns = features_df["close"].pct_change()
-                    target = (returns > 0).astype(int)
-                    target.name = "direction"
-                else:
-                    return False, "No suitable target variable found", None
+                # Create a simple target based on available data
+                print(
+                    f"Debug: Creating target from features, columns: {list(features_df.columns)}"
+                )
+
+                # Try to get original price data for target creation
+                target = self._create_target_from_data(
+                    features_df, feature_key, session_state
+                )
+
+                if target is None:
+                    available_cols = list(features_df.columns)
+                    return (
+                        False,
+                        f"❌ No suitable target variable found. Available columns: {available_cols[:10]}{'...' if len(available_cols) > 10 else ''}",
+                        None,
+                    )
 
             # Prepare features (remove target if it exists in features)
             X = features_df.copy()
@@ -170,10 +224,18 @@ class SimpleModelTrainingManager:
                 session_state.model_cache = {}
             session_state.model_cache[model_id] = model_info
 
-            return True, "Model trained successfully", model_id
+            return True, "✅ Model trained successfully", model_id
 
         except Exception as e:
-            return False, f"Training failed: {str(e)}", None
+            import traceback
+
+            error_details = traceback.format_exc()
+            print(f"Training error details: {error_details}")
+            return (
+                False,
+                f"❌ Training failed: {str(e)}\n\nDetails: Check terminal for full error trace",
+                None,
+            )
 
     def _initialize_model(
         self, model_config: Dict[str, Any], hyperparams: Dict[str, Any]
@@ -279,3 +341,155 @@ class SimpleModelTrainingManager:
         except Exception as e:
             # Return basic metrics if detailed evaluation fails
             return {"error": str(e), "basic_score": 0.0}
+
+    def _create_target_from_data(self, features_df, feature_key, session_state):
+        """Create target variable from available data sources"""
+
+        try:
+            # Method 1: Try to get original price data from data_cache
+            target = self._create_target_from_price_data(
+                feature_key, session_state, features_df.index
+            )
+            if target is not None:
+                print("Debug: Created target from original price data")
+                return target
+
+            # Method 2: Create target from technical indicators
+            target = self._create_target_from_indicators(features_df)
+            if target is not None:
+                print(
+                    f"Debug: Created target from technical indicators, shape: {target.shape}"
+                )
+                return target
+
+            # Method 3: Create target from momentum/trend indicators
+            target = self._create_target_from_momentum(features_df)
+            if target is not None:
+                print(
+                    f"Debug: Created target from momentum indicators, shape: {target.shape}"
+                )
+                return target
+
+            return None
+
+        except Exception as e:
+            print(f"Debug: Error creating target: {e}")
+            return None
+
+    def _create_target_from_price_data(self, feature_key, session_state, feature_index):
+        """Try to create target from original price data in data_cache"""
+
+        try:
+            # Extract symbol from feature_key (e.g., "GOOGL_1y_1d_technical" -> "GOOGL")
+            symbol = feature_key.split("_")[0]
+
+            if not hasattr(session_state, "data_cache") or not session_state.data_cache:
+                return None
+
+            # Look for matching symbol in data_cache
+            for data_key, data_info in session_state.data_cache.items():
+                if symbol.upper() in data_key.upper():
+                    if "data" in data_info:
+                        price_data = data_info["data"]
+
+                        # Check for close price column
+                        close_col = None
+                        for col in ["Close", "close", "CLOSE"]:
+                            if col in price_data.columns:
+                                close_col = col
+                                break
+
+                        if close_col is not None:
+                            # Align with feature data index
+                            common_idx = price_data.index.intersection(feature_index)
+                            if len(common_idx) > 10:  # Need sufficient data
+                                close_prices = price_data.loc[common_idx, close_col]
+                                returns = close_prices.pct_change().dropna()
+                                target = (returns > 0).astype(int)
+                                target.name = "price_direction"
+                                return target
+            return None
+
+        except Exception as e:
+            print(f"Debug: Error in _create_target_from_price_data: {e}")
+            return None
+
+    def _create_target_from_indicators(self, features_df):
+        """Create target from technical indicators like RSI or MACD"""
+
+        try:
+            # Strategy 1: RSI-based target (RSI > 50 indicates bullish)
+            if "RSI" in features_df.columns:
+                rsi = features_df["RSI"].dropna()
+                if len(rsi) > 10:
+                    target = (rsi > 50).astype(int)
+                    target.name = "rsi_direction"
+                    return target
+
+            # Strategy 2: MACD-based target
+            if (
+                "MACD_MACD" in features_df.columns
+                and "MACD_Signal" in features_df.columns
+            ):
+                macd = features_df["MACD_MACD"].dropna()
+                signal = features_df["MACD_Signal"].dropna()
+                common_idx = macd.index.intersection(signal.index)
+                if len(common_idx) > 10:
+                    macd_aligned = macd.loc[common_idx]
+                    signal_aligned = signal.loc[common_idx]
+                    target = (macd_aligned > signal_aligned).astype(int)
+                    target.name = "macd_signal"
+                    return target
+
+            # Strategy 3: Moving Average Cross
+            if "SMA_20" in features_df.columns and "SMA_50" in features_df.columns:
+                sma20 = features_df["SMA_20"].dropna()
+                sma50 = features_df["SMA_50"].dropna()
+                common_idx = sma20.index.intersection(sma50.index)
+                if len(common_idx) > 10:
+                    sma20_aligned = sma20.loc[common_idx]
+                    sma50_aligned = sma50.loc[common_idx]
+                    target = (sma20_aligned > sma50_aligned).astype(int)
+                    target.name = "sma_cross"
+                    return target
+
+            return None
+
+        except Exception as e:
+            print(f"Debug: Error in _create_target_from_indicators: {e}")
+            return None
+
+    def _create_target_from_momentum(self, features_df):
+        """Create target from momentum indicators"""
+
+        try:
+            # Strategy 1: Momentum-based target
+            if "MOMENTUM" in features_df.columns:
+                momentum = features_df["MOMENTUM"].dropna()
+                if len(momentum) > 10:
+                    target = (momentum > 0).astype(int)
+                    target.name = "momentum_direction"
+                    return target
+
+            # Strategy 2: Stochastic-based target
+            if "Stoch_%K" in features_df.columns:
+                stoch_k = features_df["Stoch_%K"].dropna()
+                if len(stoch_k) > 10:
+                    target = (stoch_k > 50).astype(int)
+                    target.name = "stoch_direction"
+                    return target
+
+            # Strategy 3: ATR-based volatility regime
+            if "ATR" in features_df.columns:
+                atr = features_df["ATR"].dropna()
+                if len(atr) > 10:
+                    atr_median = atr.median()
+                    target = (atr > atr_median).astype(int)
+                    target.name = "volatility_regime"
+                    return target
+
+            return None
+
+        except Exception as e:
+            print(f"Debug: Error in _create_target_from_momentum: {e}")
+            return None

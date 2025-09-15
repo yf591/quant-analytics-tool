@@ -78,8 +78,17 @@ def main():
     This lab focuses on deep exploration of traditional machine learning models.
     Each model has its own dedicated workspace for hyperparameter tuning,
     training, and comprehensive analysis.
+    
+    📝 **Note**: Traditional ML models (Random Forest, XGBoost, SVM) don't use 
+    epochs or batch sizes like deep learning models. Instead, they use:
+    - **n_estimators**: Number of trees/boosting rounds
+    - **learning_rate**: Step size for gradient boosting
+    - **max_iter**: Maximum iterations for optimization
     """
     )
+
+    # Debug information panel (expandable)
+    show_debug_info()
 
     # Check prerequisites
     if not check_prerequisites():
@@ -251,7 +260,10 @@ def show_random_forest_lab(feature_key: str):
 
         # Training button
         if st.button(
-            "🚀 Train Random Forest", type="primary", use_container_width=True
+            "🚀 Train Random Forest",
+            type="primary",
+            use_container_width=True,
+            key="train_rf",
         ):
             train_traditional_model(
                 feature_key=feature_key,
@@ -313,7 +325,12 @@ def show_xgboost_lab(feature_key: str):
         st.markdown("---")
 
         # Training button
-        if st.button("🚀 Train XGBoost", type="primary", use_container_width=True):
+        if st.button(
+            "🚀 Train XGBoost",
+            type="primary",
+            use_container_width=True,
+            key="train_xgb",
+        ):
             train_traditional_model(
                 feature_key=feature_key,
                 model_class=model_class,
@@ -374,7 +391,9 @@ def show_svm_lab(feature_key: str):
         st.markdown("---")
 
         # Training button
-        if st.button("🚀 Train SVM", type="primary", use_container_width=True):
+        if st.button(
+            "🚀 Train SVM", type="primary", use_container_width=True, key="train_svm"
+        ):
             train_traditional_model(
                 feature_key=feature_key,
                 model_class=model_class,
@@ -910,15 +929,25 @@ def display_model_results(model_key: str, model_name: str):
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                if st.button("📊 Detailed Analysis", use_container_width=True):
+                if st.button(
+                    "📊 Detailed Analysis",
+                    use_container_width=True,
+                    key=f"detailed_analysis_{model_key}",
+                ):
                     st.info("Detailed analysis feature coming soon!")
 
             with col2:
-                if st.button("💾 Export Model", use_container_width=True):
+                if st.button(
+                    "💾 Export Model",
+                    use_container_width=True,
+                    key=f"export_model_{model_key}",
+                ):
                     st.info("Model export feature coming soon!")
 
             with col3:
-                if st.button("🔄 Retrain", use_container_width=True):
+                if st.button(
+                    "🔄 Retrain", use_container_width=True, key=f"retrain_{model_key}"
+                ):
                     # Clear current results to allow retraining
                     if model_key in st.session_state.current_experiment:
                         del st.session_state.current_experiment[model_key]
@@ -944,6 +973,138 @@ def display_model_results(model_key: str, model_name: str):
         - **Training Details**: Hyperparameters and configuration
         """
         )
+
+
+def show_debug_info():
+    """Show debug information about session state and feature cache"""
+    with st.expander("🔍 Debug Information", expanded=False):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### Session State Status")
+
+            # Check feature_cache
+            if hasattr(st.session_state, "feature_cache"):
+                st.success("✅ feature_cache exists")
+                cache_keys = list(st.session_state.feature_cache.keys())
+                st.write(f"**Available datasets**: {len(cache_keys)}")
+                for key in cache_keys:
+                    st.write(f"- {key}")
+            else:
+                st.error("❌ feature_cache not found")
+
+            # Check model_cache
+            if hasattr(st.session_state, "model_cache"):
+                st.success("✅ model_cache exists")
+                model_keys = list(st.session_state.model_cache.keys())
+                st.write(f"**Trained models**: {len(model_keys)}")
+            else:
+                st.info("ℹ️ model_cache not initialized")
+
+        with col2:
+            st.markdown("### Feature Data Structure")
+
+            if (
+                hasattr(st.session_state, "feature_cache")
+                and st.session_state.feature_cache
+            ):
+                # Show structure of first dataset
+                first_key = list(st.session_state.feature_cache.keys())[0]
+                # Filter out metadata keys
+                data_keys = [
+                    k
+                    for k in st.session_state.feature_cache.keys()
+                    if not k.endswith("_metadata")
+                ]
+                if data_keys:
+                    first_key = data_keys[0]
+                    dataset = st.session_state.feature_cache[first_key]
+
+                    st.write(f"**Dataset**: {first_key}")
+                    st.write(f"**Type**: {type(dataset).__name__}")
+
+                    if isinstance(dataset, pd.DataFrame):
+                        st.success("✅ DataFrame format (compatible)")
+                        st.write(f"**Shape**: {dataset.shape}")
+                        st.write(
+                            f"**Columns**: {list(dataset.columns[:5])}{'...' if len(dataset.columns) > 5 else ''}"
+                        )
+
+                        # Check for target-suitable columns
+                        suitable_cols = []
+                        target_strategies = []
+
+                        # Price-based targets
+                        if "returns" in dataset.columns:
+                            suitable_cols.append("returns")
+                            target_strategies.append("📈 Price Returns")
+                        if "close" in dataset.columns or "Close" in dataset.columns:
+                            suitable_cols.append("close/Close")
+                            target_strategies.append("📈 Price Direction")
+
+                        # Indicator-based targets
+                        if "RSI" in dataset.columns:
+                            suitable_cols.append("RSI")
+                            target_strategies.append("📊 RSI Signal (>50)")
+                        if (
+                            "MACD_MACD" in dataset.columns
+                            and "MACD_Signal" in dataset.columns
+                        ):
+                            suitable_cols.append("MACD")
+                            target_strategies.append("📊 MACD Cross Signal")
+                        if "SMA_20" in dataset.columns and "SMA_50" in dataset.columns:
+                            suitable_cols.append("SMA Cross")
+                            target_strategies.append("📊 Moving Average Cross")
+                        if "MOMENTUM" in dataset.columns:
+                            suitable_cols.append("MOMENTUM")
+                            target_strategies.append("📊 Momentum Direction")
+                        if "Stoch_%K" in dataset.columns:
+                            suitable_cols.append("Stochastic")
+                            target_strategies.append("📊 Stochastic Signal")
+
+                        if target_strategies:
+                            st.success("✅ Available target strategies:")
+                            for strategy in target_strategies:
+                                st.write(f"  • {strategy}")
+                        else:
+                            st.warning("⚠️ No suitable target creation strategies found")
+
+                    elif isinstance(dataset, dict):
+                        st.write(f"**Keys**: {list(dataset.keys())}")
+                        if "features" in dataset:
+                            features_df = dataset["features"]
+                            st.success("✅ 'features' key found")
+                            if isinstance(features_df, pd.DataFrame):
+                                st.write(f"**Shape**: {features_df.shape}")
+                                st.write(
+                                    f"**Columns**: {list(features_df.columns[:5])}{'...' if len(features_df.columns) > 5 else ''}"
+                                )
+                            else:
+                                st.warning(
+                                    f"⚠️ 'features' is not a DataFrame: {type(features_df)}"
+                                )
+                        else:
+                            st.error("❌ 'features' key missing")
+
+                        if "target" in dataset:
+                            st.success("✅ 'target' key found")
+                        else:
+                            st.info("ℹ️ 'target' key not found (will be auto-generated)")
+                    else:
+                        st.warning(f"⚠️ Unexpected format: {type(dataset)}")
+                else:
+                    st.warning("⚠️ Only metadata found, no actual datasets")
+            else:
+                st.warning("⚠️ No feature data available")
+                st.markdown(
+                    """
+                **To resolve**:
+                1. Go to **🛠️ Feature Engineering** page
+                2. Load market data
+                3. Generate technical indicators
+                4. Save feature dataset
+                """
+                )
 
 
 if __name__ == "__main__":
