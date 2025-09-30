@@ -23,6 +23,8 @@ try:
         BuyAndHoldStrategy,
         MomentumStrategy,
         MeanReversionStrategy,
+        ModelBasedStrategy,
+        MultiAssetStrategy,
         PerformanceCalculator,
         Portfolio,
         Order,
@@ -731,310 +733,51 @@ class StrategyBuilder:
             raise ValueError(f"Unknown strategy type: {strategy_type}")
 
     def _build_model_strategy(self, parameters: Dict, symbols: List[str]):
-        """Build model-based strategy"""
+        """Build model-based strategy using backend implementation"""
+        try:
+            from src.backtesting.advanced_strategies import ModelBasedStrategy
 
-        class ModelBasedStrategy:
-            def __init__(
-                self, model, symbols, confidence_threshold=0.7, position_sizing="Fixed"
-            ):
-                self.model = model
-                self.symbols = symbols
-                self.confidence_threshold = confidence_threshold
-                self.position_sizing = position_sizing
-                self.engine = None
-                self.last_signals = {}
+            # Get model from parameters or session state
+            model = parameters.get("model")
+            if model is None:
+                # Try to get from session state
+                import streamlit as st
 
-            def set_backtest_engine(self, engine):
-                self.engine = engine
+                model = st.session_state.get("selected_model")
 
-            def on_start(self):
-                """Initialize strategy"""
-                pass
+            if model is None:
+                raise ValueError("No model provided for model-based strategy")
 
-            def on_data(self, current_time: datetime) -> List:
-                """Generate signals based on model predictions"""
-                signals = []
+            # Create strategy with backend class
+            return ModelBasedStrategy(
+                model=model,
+                symbols=symbols,
+                confidence_threshold=parameters.get("confidence_threshold", 0.7),
+                position_sizing=parameters.get("position_sizing", "Fixed"),
+            )
 
-                if self.engine is None:
-                    return signals
-
-                for symbol in self.symbols:
-                    try:
-                        # Get current price
-                        current_price = self.engine.get_current_price(symbol)
-                        if current_price is None:
-                            continue
-
-                        # Simplified feature extraction for demo
-                        # In practice, you'd use the same features as training
-                        features = self._extract_features(symbol, current_time)
-                        if features is None:
-                            continue
-
-                        # Make prediction
-                        if hasattr(self.model, "predict_proba"):
-                            # Classification with probability
-                            probabilities = self.model.predict_proba([features])[0]
-                            if len(probabilities) > 1:
-                                confidence = max(probabilities)
-                                prediction = np.argmax(probabilities)
-                            else:
-                                confidence = probabilities[0]
-                                prediction = 1 if confidence > 0.5 else 0
-                        else:
-                            # Direct prediction
-                            prediction = self.model.predict([features])[0]
-                            confidence = (
-                                abs(prediction)
-                                if isinstance(prediction, (int, float))
-                                else 0.7
-                            )
-
-                        # Generate signal if confidence is high enough
-                        if confidence >= self.confidence_threshold:
-                            position_size = self._calculate_position_size(
-                                symbol, confidence
-                            )
-
-                            if prediction > 0.5:  # Buy signal
-                                signals.append(
-                                    {
-                                        "symbol": symbol,
-                                        "side": OrderSide.BUY,
-                                        "quantity": position_size,
-                                        "type": OrderType.MARKET,
-                                        "confidence": confidence,
-                                    }
-                                )
-                            elif prediction < 0.5:  # Sell signal
-                                current_position = self.engine.positions.get(symbol)
-                                if current_position and current_position.quantity > 0:
-                                    signals.append(
-                                        {
-                                            "symbol": symbol,
-                                            "side": OrderSide.SELL,
-                                            "quantity": min(
-                                                position_size, current_position.quantity
-                                            ),
-                                            "type": OrderType.MARKET,
-                                            "confidence": confidence,
-                                        }
-                                    )
-
-                    except Exception as e:
-                        # Skip this symbol if prediction fails
-                        continue
-
-                return signals
-
-            def _extract_features(
-                self, symbol: str, current_time: datetime
-            ) -> Optional[np.ndarray]:
-                """Extract features for model prediction"""
-                try:
-                    # Get historical data for feature calculation
-                    historical_data = self.engine.get_historical_data(
-                        symbol, periods=50
-                    )
-                    if historical_data is None or len(historical_data) < 10:
-                        return None
-
-                    # Calculate simple technical features
-                    close_prices = historical_data["Close"]
-
-                    # Moving averages
-                    sma_5 = close_prices.rolling(5).mean().iloc[-1]
-                    sma_20 = close_prices.rolling(20).mean().iloc[-1]
-
-                    # Price ratios
-                    price_to_sma5 = close_prices.iloc[-1] / sma_5 if sma_5 > 0 else 1
-                    price_to_sma20 = close_prices.iloc[-1] / sma_20 if sma_20 > 0 else 1
-
-                    # Volatility
-                    returns = close_prices.pct_change().dropna()
-                    volatility = (
-                        returns.rolling(10).std().iloc[-1] if len(returns) > 10 else 0
-                    )
-
-                    # RSI-like momentum
-                    gains = returns[returns > 0].rolling(14).mean().iloc[-1] or 0
-                    losses = (
-                        abs(returns[returns < 0]).rolling(14).mean().iloc[-1] or 0.01
-                    )
-                    rsi_like = gains / (gains + losses)
-
-                    features = np.array(
-                        [price_to_sma5, price_to_sma20, volatility, rsi_like]
-                    )
-
-                    # Ensure no NaN values
-                    features = np.nan_to_num(features, 0)
-
-                    return features
-
-                except Exception as e:
-                    return None
-
-            def _calculate_position_size(self, symbol: str, confidence: float) -> int:
-                """Calculate position size based on portfolio and confidence"""
-                try:
-                    portfolio_value = self.engine.get_portfolio_value()
-                    current_price = self.engine.get_current_price(symbol)
-
-                    if self.position_sizing == "Fixed":
-                        # Fixed percentage of portfolio
-                        position_value = portfolio_value * 0.1  # 10% of portfolio
-                    elif self.position_sizing == "Kelly":
-                        # Simplified Kelly criterion
-                        position_value = portfolio_value * confidence * 0.2
-                    else:  # Risk Parity
-                        position_value = portfolio_value * 0.05  # Conservative 5%
-
-                    position_size = (
-                        int(position_value / current_price) if current_price > 0 else 0
-                    )
-                    return max(1, position_size)  # At least 1 share
-
-                except Exception:
-                    return 100  # Default position size
-
-            def on_finish(self):
-                """Clean up strategy"""
-                pass
-
-        # This would normally get the model from session state
-        # For now, create a dummy strategy that returns the class
-        return ModelBasedStrategy
+        except ImportError as e:
+            raise ImportError(f"Failed to import ModelBasedStrategy from backend: {e}")
+        except Exception as e:
+            raise ValueError(f"Failed to create model-based strategy: {e}")
 
     def _build_multi_asset_strategy(self, parameters: Dict, symbols: List[str]):
-        """Build multi-asset portfolio strategy"""
+        """Build multi-asset portfolio strategy using backend implementation"""
+        try:
+            from src.backtesting.advanced_strategies import MultiAssetStrategy
 
-        class MultiAssetStrategy:
-            def __init__(
-                self,
-                symbols,
-                rebalance_frequency="Monthly",
-                risk_model="Equal Weight",
-                max_position=0.2,
-            ):
-                self.symbols = symbols
-                self.rebalance_frequency = rebalance_frequency
-                self.risk_model = risk_model
-                self.max_position = max_position
-                self.engine = None
-                self.last_rebalance = None
-                self.target_weights = {}
+            # Create strategy with backend class
+            return MultiAssetStrategy(
+                symbols=symbols,
+                rebalance_frequency=parameters.get("rebalance_frequency", "Monthly"),
+                risk_model=parameters.get("risk_model", "Equal Weight"),
+                max_position=parameters.get("max_position", 0.2),
+            )
 
-            def set_backtest_engine(self, engine):
-                self.engine = engine
-
-            def on_start(self):
-                """Initialize strategy"""
-                if self.risk_model == "Equal Weight":
-                    weight = min(1.0 / len(self.symbols), self.max_position)
-                    self.target_weights = {symbol: weight for symbol in self.symbols}
-
-            def on_data(self, current_time: datetime) -> List:
-                """Rebalance portfolio based on frequency"""
-                signals = []
-
-                if self._should_rebalance(current_time):
-                    # Calculate current weights
-                    current_weights = self._get_current_weights()
-
-                    # Generate rebalancing orders
-                    for symbol in self.symbols:
-                        current_weight = current_weights.get(symbol, 0)
-                        target_weight = self.target_weights.get(symbol, 0)
-
-                        weight_diff = target_weight - current_weight
-
-                        if (
-                            abs(weight_diff) > 0.01
-                        ):  # Only rebalance if significant difference
-                            portfolio_value = self.engine.get_portfolio_value()
-                            current_price = self.engine.get_current_price(symbol)
-
-                            if current_price and current_price > 0:
-                                target_value = portfolio_value * target_weight
-                                current_position = self.engine.positions.get(symbol)
-                                current_value = (
-                                    (current_position.quantity * current_price)
-                                    if current_position
-                                    else 0
-                                )
-
-                                value_diff = target_value - current_value
-                                quantity_diff = int(value_diff / current_price)
-
-                                if quantity_diff > 0:
-                                    signals.append(
-                                        {
-                                            "symbol": symbol,
-                                            "side": OrderSide.BUY,
-                                            "quantity": quantity_diff,
-                                            "type": OrderType.MARKET,
-                                        }
-                                    )
-                                elif quantity_diff < 0:
-                                    signals.append(
-                                        {
-                                            "symbol": symbol,
-                                            "side": OrderSide.SELL,
-                                            "quantity": abs(quantity_diff),
-                                            "type": OrderType.MARKET,
-                                        }
-                                    )
-
-                    self.last_rebalance = current_time
-
-                return signals
-
-            def _should_rebalance(self, current_time: datetime) -> bool:
-                """Check if it's time to rebalance"""
-                if self.last_rebalance is None:
-                    return True
-
-                if self.rebalance_frequency == "Daily":
-                    return True
-                elif self.rebalance_frequency == "Weekly":
-                    return (current_time - self.last_rebalance).days >= 7
-                elif self.rebalance_frequency == "Monthly":
-                    return (current_time - self.last_rebalance).days >= 30
-
-                return False
-
-            def _get_current_weights(self) -> Dict[str, float]:
-                """Get current portfolio weights"""
-                portfolio_value = self.engine.get_portfolio_value()
-                weights = {}
-
-                for symbol in self.symbols:
-                    position = self.engine.positions.get(symbol)
-                    if position:
-                        current_price = self.engine.get_current_price(symbol)
-                        if current_price:
-                            position_value = position.quantity * current_price
-                            weights[symbol] = (
-                                position_value / portfolio_value
-                                if portfolio_value > 0
-                                else 0
-                            )
-                    else:
-                        weights[symbol] = 0
-
-                return weights
-
-            def on_finish(self):
-                """Clean up strategy"""
-                pass
-
-        return MultiAssetStrategy(
-            symbols=symbols,
-            rebalance_frequency=parameters.get("rebalance_frequency", "Monthly"),
-            risk_model=parameters.get("risk_model", "Equal Weight"),
-            max_position=parameters.get("max_position", 0.2),
-        )
+        except ImportError as e:
+            raise ImportError(f"Failed to import MultiAssetStrategy from backend: {e}")
+        except Exception as e:
+            raise ValueError(f"Failed to create multi-asset strategy: {e}")
 
 
 class BacktestResultProcessor:
@@ -1111,12 +854,22 @@ class BacktestResultProcessor:
             return []
 
     def _calculate_win_rate(self, trades: List[Dict]) -> float:
-        """Calculate win rate from trades"""
+        """Calculate win rate using backend metrics when possible"""
         if not trades:
             return 0.0
 
-        profitable_trades = sum(1 for trade in trades if trade.get("pnl", 0) > 0)
-        return profitable_trades / len(trades) if trades else 0.0
+        # Use backend PerformanceCalculator if available
+        try:
+            from src.backtesting.metrics import PerformanceCalculator
+
+            calculator = PerformanceCalculator()
+            # Use backend's trade metrics calculation
+            trade_metrics = calculator._calculate_trade_metrics(trades)
+            return trade_metrics.get("win_rate", 0.0)
+        except:
+            # Fallback to simple calculation for UI display
+            profitable_trades = sum(1 for trade in trades if trade.get("pnl", 0) > 0)
+            return profitable_trades / len(trades) if trades else 0.0
 
     def _calculate_drawdown_info(self, portfolio_values: List[float]) -> Dict[str, Any]:
         """Calculate detailed drawdown information"""

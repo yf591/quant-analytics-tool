@@ -31,6 +31,11 @@ from .strategies import (
     MeanReversionStrategy,
 )
 
+from .advanced_strategies import (
+    ModelBasedStrategy,
+    MultiAssetStrategy,
+)
+
 from .metrics import (
     PerformanceMetrics,
     DrawdownMetrics,
@@ -74,6 +79,9 @@ __all__ = [
     "BuyAndHoldStrategy",
     "MomentumStrategy",
     "MeanReversionStrategy",
+    # Advanced strategy components
+    "ModelBasedStrategy",
+    "MultiAssetStrategy",
     # Metrics components
     "PerformanceMetrics",
     "DrawdownMetrics",
