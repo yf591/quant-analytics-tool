@@ -1622,20 +1622,25 @@ def calculate_risk_metrics(
         from src.risk.risk_metrics import RiskMetrics
 
         risk_calculator = RiskMetrics(
-            returns=backtest_data,
-            confidence_level=confidence_level,
-            lookback_days=lookback_days,
+            confidence_level=confidence_level, rolling_window=lookback_days
         )
 
+        # Calculate risk adjusted returns for Sharpe and Sortino ratios
+        risk_adjusted = risk_calculator.risk_adjusted_returns(backtest_data)
+        max_dd_result = risk_calculator.maximum_drawdown(backtest_data)
+
         metrics = {
-            "var": risk_calculator.value_at_risk(method=var_method.lower()),
-            "cvar": risk_calculator.conditional_var(),
-            "max_drawdown": risk_calculator.max_drawdown(),
-            "sharpe_ratio": risk_calculator.sharpe_ratio(),
-            "sortino_ratio": risk_calculator.sortino_ratio(),
-            "volatility": risk_calculator.volatility(),
-            "skewness": risk_calculator.skewness(),
-            "kurtosis": risk_calculator.kurtosis(),
+            "var": risk_calculator.value_at_risk(
+                backtest_data, method=var_method.lower()
+            ),
+            "cvar": risk_calculator.conditional_var(backtest_data),
+            "max_drawdown": max_dd_result.get("max_drawdown", 0.0),
+            "sharpe_ratio": risk_adjusted.get("sharpe_ratio", 0.0),
+            "sortino_ratio": risk_adjusted.get("sortino_ratio", 0.0),
+            "calmar_ratio": risk_adjusted.get("calmar_ratio", 0.0),
+            "volatility": backtest_data.std() * np.sqrt(252),  # Annualized volatility
+            "skewness": backtest_data.skew(),
+            "kurtosis": backtest_data.kurtosis(),
         }
 
         # Store results in cache
@@ -1665,15 +1670,19 @@ def optimize_portfolio(
         optimizer = PortfolioOptimizer()
 
         # Prepare data for optimization
-        expected_returns = backtest_data.mean() * 252  # Annualized
-        cov_matrix = (
-            backtest_data.cov() * 252
-            if isinstance(backtest_data, pd.DataFrame)
-            else pd.Series([backtest_data]).cov() * 252
-        )
+        if isinstance(backtest_data, pd.DataFrame):
+            expected_returns = backtest_data.mean() * 252  # Annualized
+            cov_matrix = (
+                backtest_data.cov() * 252
+            )  # Covariance matrix for multiple assets
+        else:
+            # Single asset case - backtest_data is a Series
+            expected_returns = backtest_data.mean() * 252  # Scalar value
+            cov_matrix = backtest_data.var() * 252  # Variance for single asset
 
         if optimization_method == "Mean Variance":
-            if isinstance(cov_matrix, pd.DataFrame):
+            if isinstance(backtest_data, pd.DataFrame):
+                # Multi-asset optimization
                 result = optimizer.mean_variance_optimization(
                     expected_returns=expected_returns.values,
                     covariance_matrix=cov_matrix.values,
@@ -1681,67 +1690,71 @@ def optimize_portfolio(
                 )
                 weights = pd.Series(result["weights"], index=expected_returns.index)
             else:
-                # Single asset case
-                weights = pd.Series([1.0], index=[0])
+                # Single asset case - no optimization needed
+                weights = pd.Series([1.0], index=["Asset"])
                 result = {
                     "expected_return": expected_returns,
                     "volatility": np.sqrt(cov_matrix),
+                    "weights": weights.values,
                 }
         elif optimization_method == "Risk Parity":
-            if isinstance(cov_matrix, pd.DataFrame):
+            if isinstance(backtest_data, pd.DataFrame):
+                # Multi-asset risk parity
                 result = optimizer.risk_parity_optimization(
                     covariance_matrix=cov_matrix.values
                 )
                 weights = pd.Series(result["weights"], index=expected_returns.index)
             else:
-                weights = pd.Series([1.0], index=[0])
+                # Single asset case - 100% allocation
+                weights = pd.Series([1.0], index=["Asset"])
                 result = {
                     "expected_return": expected_returns,
                     "volatility": np.sqrt(cov_matrix),
+                    "weights": weights.values,
                 }
         elif optimization_method == "Minimum Variance":
-            if isinstance(cov_matrix, pd.DataFrame):
+            if isinstance(backtest_data, pd.DataFrame):
+                # Multi-asset minimum variance
                 result = optimizer.minimum_variance_optimization(
                     covariance_matrix=cov_matrix.values
                 )
                 weights = pd.Series(result["weights"], index=expected_returns.index)
             else:
-                weights = pd.Series([1.0], index=[0])
+                # Single asset case - 100% allocation
+                weights = pd.Series([1.0], index=["Asset"])
                 result = {
                     "expected_return": expected_returns,
                     "volatility": np.sqrt(cov_matrix),
+                    "weights": weights.values,
                 }
         else:
-            if isinstance(cov_matrix, pd.DataFrame):
+            if isinstance(backtest_data, pd.DataFrame):
+                # Default: Mean Variance optimization
                 result = optimizer.mean_variance_optimization(
                     expected_returns=expected_returns.values,
                     covariance_matrix=cov_matrix.values,
                 )
                 weights = pd.Series(result["weights"], index=expected_returns.index)
             else:
-                weights = pd.Series([1.0], index=[0])
+                # Single asset case - 100% allocation
+                weights = pd.Series([1.0], index=["Asset"])
                 result = {
                     "expected_return": expected_returns,
                     "volatility": np.sqrt(cov_matrix),
+                    "weights": weights.values,
                 }
 
         # Calculate optimization results
-        if isinstance(expected_returns, pd.Series) and len(expected_returns) > 1:
+        if isinstance(backtest_data, pd.DataFrame):
+            # Multi-asset case
             portfolio_return = np.dot(weights.values, expected_returns.values)
             portfolio_vol = np.sqrt(
                 np.dot(weights.values, np.dot(cov_matrix.values, weights.values))
             )
         else:
-            portfolio_return = (
-                expected_returns
-                if np.isscalar(expected_returns)
-                else expected_returns.iloc[0]
-            )
-            portfolio_vol = (
-                np.sqrt(cov_matrix)
-                if np.isscalar(cov_matrix)
-                else np.sqrt(cov_matrix.iloc[0, 0])
-            )
+            # Single asset case
+            portfolio_return = expected_returns  # Already a scalar
+            portfolio_vol = np.sqrt(cov_matrix)  # Already a scalar
 
         sharpe = (portfolio_return - 0.02) / portfolio_vol if portfolio_vol > 0 else 0.0
 
