@@ -53,19 +53,39 @@ class BacktestDataPreparer:
             Original price data from metadata if found, None otherwise
         """
         metadata_key = f"{feature_key}_metadata"
+        print(f"Looking for metadata key: {metadata_key}")
 
         if (
             hasattr(session_state, "feature_cache")
             and metadata_key in session_state.feature_cache
         ):
             metadata = session_state.feature_cache[metadata_key]
-            if isinstance(metadata, dict) and "original_data" in metadata:
-                original_data = metadata["original_data"]
-                if isinstance(original_data, pd.DataFrame):
-                    print(
-                        f"Found original_data in metadata '{metadata_key}': {original_data.shape}"
-                    )
-                    return original_data
+            print(f"Found metadata with type: {type(metadata)}")
+
+            if isinstance(metadata, dict):
+                print(f"Metadata keys: {list(metadata.keys())}")
+
+                if "original_data" in metadata:
+                    original_data = metadata["original_data"]
+                    if isinstance(original_data, pd.DataFrame):
+                        print(
+                            f"Found original_data in metadata '{metadata_key}': {original_data.shape}"
+                        )
+                        print(f"Original data columns: {list(original_data.columns)}")
+                        return original_data
+                    else:
+                        print(
+                            f"original_data is not a DataFrame: {type(original_data)}"
+                        )
+                else:
+                    print("No 'original_data' key found in metadata")
+            else:
+                print("Metadata is not a dictionary")
+        else:
+            print(f"Metadata key '{metadata_key}' not found in feature cache")
+            if hasattr(session_state, "feature_cache"):
+                available_keys = list(session_state.feature_cache.keys())
+                print(f"Available feature cache keys: {available_keys}")
 
         return None
 
@@ -73,17 +93,47 @@ class BacktestDataPreparer:
         self, feature_data: Union[pd.DataFrame, Dict]
     ) -> pd.DataFrame:
         """
-        Prepare feature data for backtesting
+        Prepare feature data for backtesting with enhanced technical indicator support
 
         Args:
             feature_data: Feature data from feature cache
 
         Returns:
-            Prepared DataFrame with price data
+            Prepared DataFrame with price data or None if no price data found
         """
 
         # Debug: Print structure to understand data format
-        if isinstance(feature_data, dict):
+        print(f"Processing feature data with type: {type(feature_data)}")
+
+        if isinstance(feature_data, pd.DataFrame):
+            print(f"Direct DataFrame with columns: {list(feature_data.columns)}")
+
+            # Check if DataFrame contains price data
+            columns_lower = [col.lower() for col in feature_data.columns]
+            price_indicators = [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "price",
+                "adj",
+            ]
+            has_price_data = any(
+                any(indicator in col for indicator in price_indicators)
+                for col in columns_lower
+            )
+
+            if has_price_data:
+                print("DataFrame appears to contain price data")
+                return self._validate_price_data(feature_data)
+            else:
+                print("DataFrame contains technical indicators but no price data")
+                print("Will check metadata for original price data")
+                # Return None to signal that metadata should be checked
+                return None
+
+        elif isinstance(feature_data, dict):
             print(f"Feature data keys: {list(feature_data.keys())}")
 
             # Check for original_data first (common in metadata)

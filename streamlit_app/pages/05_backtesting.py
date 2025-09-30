@@ -586,143 +586,56 @@ def run_comprehensive_backtest(
                     data_key = data_source.split("Raw Data: ")[1].split(" (")[0]
                     source_type = "raw"
 
-            # Get and prepare data based on source type
+            # Get and prepare data based on source type using BacktestDataPreparer
             try:
                 if source_type == "features":
+                    if data_key not in st.session_state.feature_cache:
+                        st.error(f"Feature data '{data_key}' not found in cache")
+                        return
+
                     feature_data = st.session_state.feature_cache[data_key]
 
                     # Debug: Show feature data structure
                     st.write(f"Debug: Processing feature data for key '{data_key}'")
                     st.write(f"Debug: Feature data type: {type(feature_data)}")
 
-                    # Check if this is a technical indicator DataFrame without price data
-                    if isinstance(feature_data, pd.DataFrame):
-                        columns_lower = [col.lower() for col in feature_data.columns]
-                        price_indicators = [
-                            "open",
-                            "high",
-                            "low",
-                            "close",
-                            "volume",
-                            "price",
-                            "adj",
-                        ]
-                        has_price_data = any(
-                            any(indicator in col for indicator in price_indicators)
-                            for col in columns_lower
-                        )
+                    # First try to prepare feature data directly
+                    data = data_preparer.prepare_feature_data(feature_data)
 
-                        if not has_price_data:
-                            st.write(
-                                f"Debug: DataFrame '{data_key}' does not contain price data"
-                            )
-                            # Try to find corresponding metadata
-                            metadata_key = f"{data_key}_metadata"
-                            if metadata_key in st.session_state.feature_cache:
-                                st.write(
-                                    f"Debug: Found metadata key '{metadata_key}', extracting original data"
-                                )
-                                metadata = st.session_state.feature_cache[metadata_key]
-                                if (
-                                    isinstance(metadata, dict)
-                                    and "original_data" in metadata
-                                ):
-                                    feature_data = metadata["original_data"]
-                                    st.write(
-                                        f"Debug: Using original_data from metadata: {feature_data.shape}"
-                                    )
-                                else:
-                                    st.error(
-                                        f"Metadata '{metadata_key}' does not contain original_data"
-                                    )
-                                    return
-                            else:
-                                st.error(
-                                    f"No metadata found for '{data_key}' and DataFrame does not contain price data"
-                                )
-                                return
-
-                    if isinstance(feature_data, dict):
+                    # If data preparation returns None (technical indicators without price data)
+                    if data is None:
                         st.write(
-                            f"Debug: Feature data keys: {list(feature_data.keys())}"
+                            f"Debug: Feature data lacks price information, checking for metadata..."
                         )
 
-                        # Try different extraction methods with priority order
-                        extracted_data = None
+                        # Try to find metadata with price data
+                        metadata_data = data_preparer.find_metadata_for_features(
+                            data_key, st.session_state
+                        )
 
-                        # Method 1: Look for original_data first (metadata structure)
-                        for key_name in [
-                            "original_data",
-                            "raw_data",
-                            "source_data",
-                            "data",
-                        ]:
-                            if key_name in feature_data:
-                                potential_data = feature_data[key_name]
-                                st.write(
-                                    f"Debug: Found '{key_name}': {type(potential_data)}"
-                                )
-                                if (
-                                    isinstance(potential_data, pd.DataFrame)
-                                    and not potential_data.empty
-                                ):
-                                    st.write(
-                                        f"Debug: DataFrame shape: {potential_data.shape}"
-                                    )
-                                    st.write(
-                                        f"Debug: DataFrame columns: {list(potential_data.columns)}"
-                                    )
-
-                                    # Check if it looks like OHLCV data
-                                    columns_lower = [
-                                        col.lower() for col in potential_data.columns
-                                    ]
-                                    price_indicators = [
-                                        "open",
-                                        "high",
-                                        "low",
-                                        "close",
-                                        "volume",
-                                        "price",
-                                    ]
-                                    has_price_data = any(
-                                        any(
-                                            indicator in col
-                                            for indicator in price_indicators
-                                        )
-                                        for col in columns_lower
-                                    )
-
-                                    if has_price_data:
-                                        st.write(
-                                            f"Debug: '{key_name}' contains price data - using for backtesting"
-                                        )
-                                        extracted_data = potential_data
-                                        break
-                                    else:
-                                        st.write(
-                                            f"Debug: '{key_name}' does not contain price data, skipping"
-                                        )
-
-                        if extracted_data is None:
-                            st.error(
-                                f"Could not extract price data from feature cache key '{data_key}'"
+                        if metadata_data is not None:
+                            data = data_preparer._validate_price_data(metadata_data)
+                            st.success(
+                                f"✅ Successfully extracted price data from metadata: {data.shape}"
                             )
-                            st.write("Available data structure:")
-                            for k, v in feature_data.items():
-                                if isinstance(v, pd.DataFrame):
-                                    st.write(f"  - {k}: {type(v)} {v.shape}")
-                                    st.write(f"    Columns: {list(v.columns)}")
-                                else:
-                                    st.write(
-                                        f"  - {k}: {type(v)} {getattr(v, 'shape', 'no shape')}"
-                                    )
+                            st.write(f"Debug: Price data columns: {list(data.columns)}")
+                        else:
+                            st.error(f"No price data found in the dataset")
+                            st.write(
+                                f"Data key: {data_key}, Source type: {source_type}"
+                            )
+                            st.info(
+                                "💡 **Solution**: Use data that includes price information (OHLCV) or ensure technical indicator data has metadata with original price data."
+                            )
                             return
-
-                        data = data_preparer._validate_price_data(extracted_data)
+                    elif data.empty:
+                        st.error(f"Prepared data is empty for key '{data_key}'")
+                        return
                     else:
-                        # Direct DataFrame
-                        data = data_preparer._validate_price_data(feature_data)
+                        st.success(
+                            f"✅ Successfully prepared feature data: {data.shape}"
+                        )
+                        st.write(f"Debug: Price data columns: {list(data.columns)}")
 
                 else:  # raw data
                     raw_data_item = st.session_state.data_cache[data_key]
@@ -786,8 +699,14 @@ def run_comprehensive_backtest(
                     # Use first available model for demo
                     model_key = list(st.session_state.model_cache.keys())[0]
                     model_info = st.session_state.model_cache[model_key]
-                    strategy = create_model_strategy(
-                        model_info, symbol, strategy_config.get("parameters", {})
+
+                    # For now, use a simple strategy since model-based strategies need more implementation
+                    st.info(
+                        "Model-based strategies are currently being implemented. Using simple buy-and-hold strategy."
+                    )
+                    strategy_config["strategy_type"] = "buy_and_hold"
+                    strategy = strategy_builder.build_strategy(
+                        strategy_config, [symbol]
                     )
                 else:
                     strategy = strategy_builder.build_strategy(
@@ -919,90 +838,8 @@ def run_comprehensive_backtest(
         st.session_state.backtest_running = False
 
 
-def create_model_strategy(model_info: Dict, symbol: str, parameters: Dict):
-    """Create model-based strategy instance"""
-
-    class ModelStrategy:
-        def __init__(self, model_info, symbol, parameters):
-            self.model = model_info["model"]
-            self.symbol = symbol
-            self.confidence_threshold = parameters.get("confidence_threshold", 0.7)
-            self.position_sizing = parameters.get("position_sizing", "Fixed")
-            self.engine = None
-
-        def set_backtest_engine(self, engine):
-            self.engine = engine
-
-        def on_start(self):
-            pass
-
-        def on_data(self, current_time: datetime) -> List:
-            signals = []
-
-            try:
-                # Simplified prediction logic
-                current_price = self.engine.get_current_price(self.symbol)
-                if current_price is None:
-                    return signals
-
-                # Mock prediction based on price trend
-                historical_data = self.engine.data.get(self.symbol)
-                if historical_data is not None and len(historical_data) > 5:
-                    recent_prices = historical_data["Close"].tail(5)
-                    price_trend = (
-                        recent_prices.iloc[-1] - recent_prices.iloc[0]
-                    ) / recent_prices.iloc[0]
-
-                    # Simple signal generation
-                    if price_trend > 0.01:  # 1% uptrend
-                        confidence = min(abs(price_trend) * 10, 1.0)
-                        if confidence > self.confidence_threshold:
-                            position_size = self._calculate_position_size(confidence)
-
-                            signals.append(
-                                {
-                                    "symbol": self.symbol,
-                                    "side": OrderSide.BUY,
-                                    "quantity": position_size,
-                                    "type": OrderType.MARKET,
-                                }
-                            )
-
-                    elif price_trend < -0.01:  # 1% downtrend
-                        # Sell existing positions
-                        position = self.engine.positions.get(self.symbol)
-                        if position and position.quantity > 0:
-                            signals.append(
-                                {
-                                    "symbol": self.symbol,
-                                    "side": OrderSide.SELL,
-                                    "quantity": position.quantity,
-                                    "type": OrderType.MARKET,
-                                }
-                            )
-
-            except Exception:
-                pass
-
-            return signals
-
-        def _calculate_position_size(self, confidence: float) -> int:
-            portfolio_value = self.engine.get_portfolio_value()
-            current_price = self.engine.get_current_price(self.symbol)
-
-            if self.position_sizing == "Fixed":
-                position_value = portfolio_value * 0.1
-            else:
-                position_value = portfolio_value * confidence * 0.2
-
-            return (
-                max(1, int(position_value / current_price)) if current_price > 0 else 1
-            )
-
-        def on_finish(self):
-            pass
-
-    return ModelStrategy(model_info, symbol, parameters)
+# Model strategy creation is now handled by StrategyBuilder in utils/backtest_utils.py
+# This eliminates duplication with src/backtesting backend
 
 
 def display_backtest_progress():
