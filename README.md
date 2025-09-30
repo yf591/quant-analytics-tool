@@ -1,4 +1,4 @@
-# 🚀 Quant Analytics Tool
+# Quant Analytics Tool
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io/)
@@ -11,79 +11,77 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
 
 ![toppage](_images/qat_toppage.jpeg)
 
-## 🎯 Key Features
+## Key Features
 
-### 📊 Data Acquisition & Analysis
-
-![Data Acquisition](_images/qat_data_acquisition.jpeg)
-
+### Data Acquisition & Analysis
 - **Multi-Source Data Integration**: Yahoo Finance, Alpha Vantage, Polygon APIs
 - **Real-time Data Processing**: Live market data with <15 minute latency
 - **Historical Data Management**: Comprehensive historical data storage and retrieval
 - **Data Quality Assurance**: Automated validation, cleaning, and outlier detection
 - **Multi-Asset Support**: Stocks, ETFs, FX, Cryptocurrencies, Options
+![Data Acquisition](_images/qat_data_acquisition.jpeg)
 
-### 🧠 Advanced Machine Learning
+### Advanced Machine Learning
 ![model_traning_hub](_images/qat_model_traning_hub.jpeg)
-- **MLOps Pipeline**: Complete end-to-end ML pipeline with automated training, versioning, deployment (✅ Implemented)
+- **MLOps Pipeline**: Complete end-to-end ML pipeline with automated training, versioning, deployment
   ![MLOps Pipeline](_images/qat_training_pipeline.jpeg)
   - Automated model training pipeline with AFML-compliant time-series cross-validation
   - Model registry with SQLite backend and staging→production workflow
   - Real-time prediction engine with TTL caching and ensemble predictions
   - Blue-Green & Canary deployment system with automatic rollback and health checks
   - Continuous model monitoring with data drift detection and real-time alerting
-- **Advanced Models**: Transformer architecture, Multi-head Attention, Meta-labeling (✅ Implemented)
-- **Deep Learning Models**: LSTM, Bidirectional LSTM, GRU architectures (✅ Implemented)
+- **Advanced Models**: Transformer architecture, Multi-head Attention, Meta-labeling
+- **Deep Learning Models**: LSTM, Bidirectional LSTM, GRU architectures
     ![Deep Learning Models](_images/qat_training2.jpeg)
-- **Ensemble Methods**: Random Forest, Bagging, Stacking, Voting Classifiers (✅ Implemented)
-- **Traditional ML**: Random Forest, XGBoost, Support Vector Machines (✅ Implemented)
+- **Ensemble Methods**: Random Forest, Bagging, Stacking, Voting Classifiers
+- **Traditional ML**: Random Forest, XGBoost, Support Vector Machines
   ![Traditional ML](_images/qat_training1.jpeg)
-- **Model Interpretation**: SHAP analysis, Feature importance, Partial dependence (✅ Implemented)
-- **Model Framework**: Base classes, evaluation, cross-validation (✅ Implemented)
-- **Production Deployment**: Enterprise-grade MLOps platform with 108 comprehensive tests (✅ Implemented)
+- **Model Interpretation**: SHAP analysis, Feature importance, Partial dependence
+- **Model Framework**: Base classes, evaluation, cross-validation
+- **Production Deployment**: Enterprise-grade MLOps platform with 108 comprehensive tests
 
-### 📈 Sophisticated Feature Engineering
-- **Technical Indicators**: Complete TA-Lib integration with custom indicators (✅ Implemented)
+### Sophisticated Feature Engineering
+- **Technical Indicators**: Complete TA-Lib integration with custom indicators
   ![Feature Engineering1](_images/qat_features1.jpeg)
   ![Feature Engineering3](_images/qat_features3.jpeg)
-- **Advanced Features**: Fractal dimension, Hurst exponent, information-driven bars (✅ Implemented)
+- **Advanced Features**: Fractal dimension, Hurst exponent, information-driven bars
   ![Feature Engineering2](_images/qat_features2.jpeg)
-- **Meta-Labeling**: Triple barrier method from "Advances in Financial ML" (✅ Implemented)
-- **Feature Selection**: Automated feature importance and selection algorithms (✅ Implemented)
-- **Feature Pipeline**: Automated feature generation and quality validation (✅ Implemented)
+- **Meta-Labeling**: Triple barrier method from "Advances in Financial ML" 
+- **Feature Selection**: Automated feature importance and selection algorithms
+- **Feature Pipeline**: Automated feature generation and quality validation
 
-### 🔙 Comprehensive Backtesting
+### Comprehensive Backtesting
 ![Backtesting](_images/qat_backtesting.jpeg)
-- **Strategy Framework**: Extensible strategy development framework (✅ Implemented)
-- **Performance Analytics**: 20+ performance and risk metrics (✅ Implemented)
-- **Event-driven Engine**: AFML-compliant backtesting with time-series integrity (✅ Implemented)
-- **Portfolio Management**: Position tracking, cash management, risk controls (✅ Implemented)
-- **Trade Execution**: Realistic slippage, commission modeling, market impact (✅ Implemented)
+- **Strategy Framework**: Extensible strategy development framework 
+- **Performance Analytics**: 20+ performance and risk metrics
+- **Event-driven Engine**: AFML-compliant backtesting with time-series integrity
+- **Portfolio Management**: Position tracking, cash management, risk controls
+- **Trade Execution**: Realistic slippage, commission modeling, market impact
 
-### ⚖️ Advanced Risk Management (✅ Week 12 Completed)
+### Advanced Risk Management
 ![Risk Management](_images/qat_risk_management.jpeg)
-- **Position Sizing**: Kelly criterion, risk parity, AFML bet sizing, volatility targeting (✅ Implemented)
-- **Risk Metrics**: VaR/CVaR (parametric, historical, Monte Carlo), maximum drawdown, portfolio risk analysis (✅ Implemented)
-- **Portfolio Optimization**: Modern Portfolio Theory, Black-Litterman, Hierarchical Risk Parity (HRP) (✅ Implemented)
-- **Stress Testing**: Monte Carlo simulation, scenario analysis, sensitivity testing, tail risk assessment (✅ Implemented)
-- **Comprehensive Framework**: 120 tests covering complete risk management system with AFML compliance (✅ Implemented)
+- **Position Sizing**: Kelly criterion, risk parity, AFML bet sizing, volatility targeting
+- **Risk Metrics**: VaR/CVaR (parametric, historical, Monte Carlo), maximum drawdown, portfolio risk analysis
+- **Portfolio Optimization**: Modern Portfolio Theory, Black-Litterman, Hierarchical Risk Parity (HRP)
+- **Stress Testing**: Monte Carlo simulation, scenario analysis, sensitivity testing, tail risk assessment
+- **Comprehensive Framework**: 120 tests covering complete risk management system with AFML compliance
 
-### 📊 Advanced Analysis (✅ Week 13 Completed)
-- **Walk-Forward Analysis**: Purged Group Time Series Split with AFML-compliant cross-validation (✅ Implemented)
-- **Monte Carlo Simulation**: Bootstrap analysis, synthetic data generation, multi-scenario probabilistic analysis (✅ Implemented)
-- **Sensitivity Analysis**: Parameter robustness testing, feature importance analysis, Greeks calculation (✅ Implemented)
-- **Advanced Stress Testing**: Binary strategy testing, extreme event simulation, liquidity stress analysis (✅ Implemented)
-- **Performance Attribution**: Brinson attribution, factor-based decomposition, risk-based attribution (✅ Implemented)
-- **Integrated Platform**: Unified analysis framework with 153 comprehensive tests and complete AFML compliance (✅ Implemented)
+### Advanced Analysis
+- **Walk-Forward Analysis**: Purged Group Time Series Split with AFML-compliant cross-validation
+- **Monte Carlo Simulation**: Bootstrap analysis, synthetic data generation, multi-scenario probabilistic analysis
+- **Sensitivity Analysis**: Parameter robustness testing, feature importance analysis, Greeks calculation
+- **Advanced Stress Testing**: Binary strategy testing, extreme event simulation, liquidity stress analysis
+- **Performance Attribution**: Brinson attribution, factor-based decomposition, risk-based attribution
+- **Integrated Platform**: Unified analysis framework with 153 comprehensive tests and complete AFML compliance
 
-### 📱 Interactive Dashboard
+### Interactive Dashboard - Currently being implemented
 - **Real-time Visualization**: Live updating charts and metrics
 - **Customizable Interface**: Drag-and-drop dashboard configuration
 - **Export Capabilities**: PDF reports, CSV data export, chart saving
 - **Mobile Responsive**: Optimized for desktop, tablet, and mobile devices
 - **Multi-language Support**: English interface with Japanese market support
 
-## 🛠 Technology Stack
+## Technology Stack
 
 ### Frontend
 - **Streamlit**: Main dashboard
