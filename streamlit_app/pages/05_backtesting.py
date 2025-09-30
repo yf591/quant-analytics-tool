@@ -19,13 +19,22 @@ import json
 
 warnings.filterwarnings("ignore")
 
-# Add src directory to path
+# Add src and components directory to path
 project_root = Path(__file__).parent.parent.parent
 streamlit_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 sys.path.append(str(streamlit_root))
 
 try:
+    # Week 14: Streamlit utils integration - use utility managers
+    from utils.backtest_utils import (
+        BacktestDataPreparer,
+        StrategyBuilder,
+        BacktestResultProcessor,
+        get_available_symbols_from_cache,
+        validate_backtest_config,
+    )
+
     # Week 11: Backtesting Framework Integration
     from src.backtesting import (
         BacktestEngine,
@@ -39,7 +48,12 @@ try:
         OrderSide,
         OrderType,
     )
-    from src.config import settings
+
+    # Import config safely
+    try:
+        from src.config import settings
+    except ImportError:
+        settings = None
 
     # Streamlit components
     from components.backtest_widgets import (
@@ -56,70 +70,98 @@ try:
         display_computation_status,
         display_alert_message,
     )
-    from utils.backtest_utils import (
-        BacktestDataPreparer,
-        StrategyBuilder,
-        BacktestResultProcessor,
-        get_available_symbols_from_cache,
-        validate_backtest_config,
-    )
 
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.error("Please ensure all required modules are properly installed.")
+    st.error(
+        "Check that the virtual environment is activated and dependencies are installed."
+    )
     st.stop()
 
 
 def main():
     """Professional Backtesting Interface"""
 
-    st.set_page_config(
-        page_title="⚡ Backtesting",
-        page_icon="⚡",
-        layout="wide",
-        initial_sidebar_state="collapsed",
-    )
+    try:
+        st.set_page_config(
+            page_title="⚡ Backtesting",
+            page_icon="⚡",
+            layout="wide",
+            initial_sidebar_state="collapsed",
+        )
 
-    st.title("⚡ Professional Backtesting Platform")
-    st.markdown(
-        "### Comprehensive strategy backtesting with advanced analytics and risk management"
-    )
+        st.title("⚡ Professional Backtesting Platform")
+        st.markdown(
+            "### Comprehensive strategy backtesting with advanced analytics and risk management"
+        )
 
-    # Initialize session state
-    initialize_session_state()
+        # Initialize session state
+        initialize_session_state()
 
-    # Check for available data
-    data_available = check_data_availability()
+        # Check for available data
+        data_available = check_data_availability()
 
-    if not data_available:
-        display_data_requirements()
-        return
+        if not data_available:
+            display_data_requirements()
+            return
 
-    # Professional workflow tabs
-    tabs = st.tabs(
-        [
-            "🎯 Strategy Backtest",
-            "📊 Results Analysis",
-            "🔀 Comparison",
-            "📈 Advanced Analytics",
-            "💾 Management",
-        ]
-    )
+        # Professional workflow tabs
+        tabs = st.tabs(
+            [
+                "🎯 Strategy Backtest",
+                "📊 Results Analysis",
+                "🔀 Comparison",
+                "📈 Advanced Analytics",
+                "💾 Management",
+            ]
+        )
 
-    with tabs[0]:
-        strategy_backtest_workflow()
+        with tabs[0]:
+            try:
+                strategy_backtest_workflow()
+            except Exception as e:
+                st.error(f"Error in strategy backtest workflow: {e}")
+                if st.checkbox("Show strategy backtest error details"):
+                    st.error(traceback.format_exc())
 
-    with tabs[1]:
-        results_analysis_workflow()
+        with tabs[1]:
+            try:
+                results_analysis_workflow()
+            except Exception as e:
+                st.error(f"Error in results analysis workflow: {e}")
+                if st.checkbox("Show analysis error details"):
+                    st.error(traceback.format_exc())
 
-    with tabs[2]:
-        comparison_workflow()
+        with tabs[2]:
+            try:
+                comparison_workflow()
+            except Exception as e:
+                st.error(f"Error in comparison workflow: {e}")
+                if st.checkbox("Show comparison error details"):
+                    st.error(traceback.format_exc())
 
-    with tabs[3]:
-        advanced_analytics_workflow()
+        with tabs[3]:
+            try:
+                advanced_analytics_workflow()
+            except Exception as e:
+                st.error(f"Error in advanced analytics workflow: {e}")
+                if st.checkbox("Show analytics error details"):
+                    st.error(traceback.format_exc())
 
-    with tabs[4]:
-        backtest_management_workflow()
+        with tabs[4]:
+            try:
+                backtest_management_workflow()
+            except Exception as e:
+                st.error(f"Error in management workflow: {e}")
+                if st.checkbox("Show management error details"):
+                    st.error(traceback.format_exc())
+
+    except Exception as e:
+        st.error(f"Critical error in backtesting interface: {e}")
+        st.error("Please check your environment setup and dependencies.")
+        if st.checkbox("Show critical error details"):
+            st.error(traceback.format_exc())
 
 
 def initialize_session_state():
@@ -138,22 +180,33 @@ def initialize_session_state():
 def check_data_availability() -> bool:
     """Check if required data is available for backtesting"""
 
-    # Check for feature data
-    feature_data_available = (
-        "feature_cache" in st.session_state and st.session_state.feature_cache
-    )
+    try:
+        # Check for feature data
+        feature_data_available = (
+            "feature_cache" in st.session_state
+            and st.session_state.feature_cache
+            and len(st.session_state.feature_cache) > 0
+        )
 
-    # Check for model data (optional for some strategies)
-    model_data_available = (
-        "model_cache" in st.session_state and st.session_state.model_cache
-    )
+        # Check for model data (optional for some strategies)
+        model_data_available = (
+            "model_cache" in st.session_state
+            and st.session_state.model_cache
+            and len(st.session_state.model_cache) > 0
+        )
 
-    # Check for data acquisition data
-    raw_data_available = (
-        "data_cache" in st.session_state and st.session_state.data_cache
-    )
+        # Check for data acquisition data
+        raw_data_available = (
+            "data_cache" in st.session_state
+            and st.session_state.data_cache
+            and len(st.session_state.data_cache) > 0
+        )
 
-    return feature_data_available or raw_data_available
+        return feature_data_available or raw_data_available
+
+    except Exception as e:
+        st.error(f"Error checking data availability: {e}")
+        return False
 
 
 def display_data_requirements():
@@ -203,57 +256,55 @@ def strategy_backtest_workflow():
 
     st.header("🎯 Strategy Backtesting Workflow")
 
-    # Create two-column layout
-    col_config, col_results = st.columns([1, 1.5])
+    # Configuration section
+    st.subheader("⚙️ Configuration")
 
-    with col_config:
-        st.subheader("⚙️ Configuration")
+    # Data source selection
+    data_source = select_data_source()
+    if not data_source:
+        return
 
-        # Data source selection
-        data_source = select_data_source()
-        if not data_source:
-            return
+    # Strategy configuration
+    strategy_widget = StrategyConfigWidget()
+    strategy_config = strategy_widget.render_strategy_selection("main")
 
-        # Strategy configuration
-        strategy_widget = StrategyConfigWidget()
-        strategy_config = strategy_widget.render_strategy_selection("main")
+    # Backtest configuration
+    config_widget = BacktestConfigWidget()
+    backtest_config = config_widget.render_backtest_config("main")
 
-        # Backtest configuration
-        config_widget = BacktestConfigWidget()
-        backtest_config = config_widget.render_backtest_config("main")
+    # Validation
+    is_valid, errors = validate_backtest_config(backtest_config)
 
-        # Validation
-        is_valid, errors = validate_backtest_config(backtest_config)
+    if errors:
+        for error in errors:
+            st.error(error)
 
-        if errors:
-            for error in errors:
-                st.error(error)
+    # Run backtest button
+    if st.button(
+        "🚀 Run Backtest",
+        type="primary",
+        use_container_width=True,
+        disabled=not is_valid,
+    ):
+        run_comprehensive_backtest(data_source, strategy_config, backtest_config)
 
-        # Run backtest button
-        if st.button(
-            "🚀 Run Backtest",
-            type="primary",
-            use_container_width=True,
-            disabled=not is_valid,
-        ):
-            run_comprehensive_backtest(data_source, strategy_config, backtest_config)
+    # Results section - displayed below the button
+    st.markdown("---")  # Separator line
+    st.subheader("📊 Backtest Results")
 
-    with col_results:
-        st.subheader("📊 Live Results")
-
-        if st.session_state.backtest_running:
-            display_backtest_progress()
-        elif st.session_state.backtest_cache:
-            # Show latest backtest result
-            latest_backtest = max(
-                st.session_state.backtest_cache.keys(),
-                key=lambda x: st.session_state.backtest_cache[x].get(
-                    "timestamp", datetime.min
-                ),
-            )
-            display_quick_results(latest_backtest)
-        else:
-            st.info("Configure and run a backtest to see results here")
+    if st.session_state.backtest_running:
+        display_backtest_progress()
+    elif st.session_state.backtest_cache:
+        # Show latest backtest result
+        latest_backtest = max(
+            st.session_state.backtest_cache.keys(),
+            key=lambda x: st.session_state.backtest_cache[x].get(
+                "timestamp", datetime.min
+            ),
+        )
+        display_quick_results(latest_backtest)
+    else:
+        st.info("Configure and run a backtest to see results here")
 
 
 def select_data_source() -> Optional[str]:
@@ -262,29 +313,235 @@ def select_data_source() -> Optional[str]:
     st.subheader("📊 Data Source Selection")
 
     available_sources = []
+    source_details = {}
 
-    # Check feature data
-    if "feature_cache" in st.session_state and st.session_state.feature_cache:
-        for feature_key in st.session_state.feature_cache.keys():
-            available_sources.append(f"Features: {feature_key}")
+    try:
+        # Check feature data
+        if "feature_cache" in st.session_state and st.session_state.feature_cache:
+            for feature_key, feature_data in st.session_state.feature_cache.items():
+                # Get basic info about the feature data
+                data_info = ""
+                price_indicator = ""
 
-    # Check raw data
-    if "data_cache" in st.session_state and st.session_state.data_cache:
-        for data_key in st.session_state.data_cache.keys():
-            available_sources.append(f"Raw Data: {data_key}")
+                # Determine if this contains price data
+                contains_price_data = False
 
-    if not available_sources:
-        st.error("No data sources available")
+                if isinstance(feature_data, dict):
+                    # Check if metadata contains original price data
+                    if "original_data" in feature_data:
+                        original_data = feature_data["original_data"]
+                        if isinstance(original_data, pd.DataFrame):
+                            columns_lower = [
+                                col.lower() for col in original_data.columns
+                            ]
+                            price_indicators = [
+                                "open",
+                                "high",
+                                "low",
+                                "close",
+                                "volume",
+                            ]
+                            contains_price_data = any(
+                                any(indicator in col for indicator in price_indicators)
+                                for col in columns_lower
+                            )
+
+                    if "features" in feature_data:
+                        features_df = feature_data["features"]
+                        if hasattr(features_df, "shape"):
+                            data_info = f" ({features_df.shape[0]} samples, {features_df.shape[1]} features)"
+                    elif "data" in feature_data:
+                        data_df = feature_data["data"]
+                        if hasattr(data_df, "shape"):
+                            data_info = f" ({data_df.shape[0]} samples, {data_df.shape[1]} columns)"
+                elif hasattr(feature_data, "shape"):
+                    # Check direct DataFrame for price data
+                    columns_lower = [col.lower() for col in feature_data.columns]
+                    price_indicators_check = [
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                        "price",
+                        "adj",
+                    ]
+                    contains_price_data = any(
+                        any(indicator in col for indicator in price_indicators_check)
+                        for col in columns_lower
+                    )
+                    data_info = f" ({feature_data.shape[0]} samples, {feature_data.shape[1]} columns)"
+
+                # Add price data indicator
+                if contains_price_data:
+                    price_indicator = " 💰"  # Contains price data
+                elif feature_key.endswith("_metadata"):
+                    price_indicator = " 📊"  # Metadata with price data
+                else:
+                    # Check if corresponding metadata exists
+                    metadata_key = f"{feature_key}_metadata"
+                    if metadata_key in st.session_state.feature_cache:
+                        price_indicator = (
+                            " 🔧"  # Technical indicators with available price data
+                        )
+                    else:
+                        price_indicator = " ⚠️"  # No price data available
+
+                source_label = f"Features: {feature_key}{data_info}{price_indicator}"
+                available_sources.append(source_label)
+                source_details[source_label] = {"type": "features", "key": feature_key}
+
+        # Check raw data
+        if "data_cache" in st.session_state and st.session_state.data_cache:
+            for data_key, data_item in st.session_state.data_cache.items():
+                # Get basic info about the raw data
+                data_info = ""
+                contains_price_data = False
+
+                if isinstance(data_item, dict) and "data" in data_item:
+                    data_df = data_item["data"]
+                    if hasattr(data_df, "shape"):
+                        data_info = (
+                            f" ({data_df.shape[0]} samples, {data_df.shape[1]} columns)"
+                        )
+                        # Check for price data in raw data
+                        if hasattr(data_df, "columns"):
+                            columns_lower = [col.lower() for col in data_df.columns]
+                            price_indicators = [
+                                "open",
+                                "high",
+                                "low",
+                                "close",
+                                "volume",
+                                "price",
+                            ]
+                            contains_price_data = any(
+                                any(indicator in col for indicator in price_indicators)
+                                for col in columns_lower
+                            )
+                elif hasattr(data_item, "shape"):
+                    data_info = (
+                        f" ({data_item.shape[0]} samples, {data_item.shape[1]} columns)"
+                    )
+                    # Check for price data in direct DataFrame
+                    if hasattr(data_item, "columns"):
+                        columns_lower = [col.lower() for col in data_item.columns]
+                        price_indicators = [
+                            "open",
+                            "high",
+                            "low",
+                            "close",
+                            "volume",
+                            "price",
+                        ]
+                        contains_price_data = any(
+                            any(indicator in col for indicator in price_indicators)
+                            for col in columns_lower
+                        )
+
+                # Add price data indicator
+                price_indicator = " 💰" if contains_price_data else " ⚠️"
+
+                source_label = f"Raw Data: {data_key}{data_info}{price_indicator}"
+                available_sources.append(source_label)
+                source_details[source_label] = {"type": "raw", "key": data_key}
+
+        if not available_sources:
+            st.error("No data sources available")
+            return None
+
+        # Display available sources with details
+        st.info(f"📈 Found {len(available_sources)} data source(s)")
+
+        # Icon legend
+        st.caption(
+            "**Icons**: 💰 Contains price data | 📊 Metadata with price data | "
+            "🔧 Technical indicators (price data available) | ⚠️ No price data"
+        )
+
+        # Debug: Show data structure in expander
+        with st.expander("🔍 Debug: Data Structure", expanded=False):
+            if "feature_cache" in st.session_state:
+                st.write(
+                    "Feature Cache Keys:", list(st.session_state.feature_cache.keys())
+                )
+                for key, data in st.session_state.feature_cache.items():
+                    st.write(f"**{key}:**")
+                    if isinstance(data, dict):
+                        st.write(f"  - Dict keys: {list(data.keys())}")
+                        for sub_key, sub_data in data.items():
+                            if hasattr(sub_data, "shape"):
+                                st.write(
+                                    f"  - {sub_key}: {type(sub_data).__name__} {sub_data.shape}"
+                                )
+                                if hasattr(sub_data, "columns"):
+                                    st.write(
+                                        f"    Columns: {list(sub_data.columns)[:10]}..."
+                                    )
+                    elif hasattr(data, "shape"):
+                        st.write(f"  - Direct DataFrame: {data.shape}")
+                        if hasattr(data, "columns"):
+                            st.write(f"    Columns: {list(data.columns)[:10]}...")
+
+            if "data_cache" in st.session_state:
+                st.write("Data Cache Keys:", list(st.session_state.data_cache.keys()))
+
+        selected_source = st.selectbox(
+            "Select Data Source",
+            available_sources,
+            help="Choose the data source for backtesting",
+            key="data_source_select",
+        )
+
+        # Provide helpful advice for data source selection
+        if selected_source:
+            source_info = source_details.get(selected_source, {})
+            data_key = source_info.get("key", "")
+
+            # Check if selected source is a technical indicator without price data
+            if source_info.get("type") == "features" and not data_key.endswith(
+                "_metadata"
+            ):
+                feature_data = st.session_state.feature_cache.get(data_key)
+                if isinstance(feature_data, pd.DataFrame):
+                    columns_lower = [col.lower() for col in feature_data.columns]
+                    price_indicators = [
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                        "price",
+                        "adj",
+                    ]
+                    has_price_data = any(
+                        any(indicator in col for indicator in price_indicators)
+                        for col in columns_lower
+                    )
+
+                    if not has_price_data:
+                        metadata_key = f"{data_key}_metadata"
+                        if metadata_key in st.session_state.feature_cache:
+                            st.warning(
+                                f"⚠️ **Note**: '{data_key}' contains technical indicators but no price data. "
+                                f"The system will automatically use price data from '{metadata_key}' for backtesting."
+                            )
+                        else:
+                            st.error(
+                                f"❌ **Error**: '{data_key}' contains technical indicators but no price data, "
+                                f"and no corresponding metadata was found. Please select a data source with price data (OHLCV)."
+                            )
+
+        # Store source details in session state for later use
+        if "backtest_source_details" not in st.session_state:
+            st.session_state.backtest_source_details = {}
+        st.session_state.backtest_source_details = source_details
+
+        return selected_source
+
+    except Exception as e:
+        st.error(f"Error selecting data source: {e}")
         return None
-
-    selected_source = st.selectbox(
-        "Select Data Source",
-        available_sources,
-        help="Choose the data source for backtesting",
-        key="data_source_select",
-    )
-
-    return selected_source
 
 
 def run_comprehensive_backtest(
@@ -292,97 +549,339 @@ def run_comprehensive_backtest(
 ):
     """Run comprehensive backtest with professional features"""
 
+    progress_container = st.container()
+
     try:
         # Update running status
         st.session_state.backtest_running = True
 
-        # Create progress tracking
-        progress_container = st.container()
-
         with progress_container:
-            # Initialize data preparer and strategy builder
-            data_preparer = BacktestDataPreparer()
-            strategy_builder = StrategyBuilder()
-            result_processor = BacktestResultProcessor()
+            # Initialize utility classes
+            try:
+                data_preparer = BacktestDataPreparer()
+                strategy_builder = StrategyBuilder()
+                result_processor = BacktestResultProcessor()
+            except Exception as e:
+                st.error(f"Failed to initialize backtest utilities: {e}")
+                return
 
             # Step 1: Prepare data
             display_computation_status("📊 Preparing data...", 0.1)
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-            # Get data based on source
-            if data_source.startswith("Features:"):
-                feature_key = data_source.replace("Features: ", "")
-                feature_data = st.session_state.feature_cache[feature_key]
-                data = data_preparer.prepare_feature_data(feature_data)
-                data_key = feature_key
-            else:  # Raw data
-                data_key = data_source.replace("Raw Data: ", "")
-                raw_data = st.session_state.data_cache[data_key]["data"]
-                data = data_preparer._validate_price_data(raw_data)
+            # Get source details
+            source_details = st.session_state.get("backtest_source_details", {})
+            source_info = source_details.get(data_source, {})
+
+            # Extract actual key from the data source
+            if source_info:
+                data_key = source_info["key"]
+                source_type = source_info["type"]
+            else:
+                # Fallback parsing
+                if data_source.startswith("Features:"):
+                    data_key = data_source.split("Features: ")[1].split(" (")[0]
+                    source_type = "features"
+                else:
+                    data_key = data_source.split("Raw Data: ")[1].split(" (")[0]
+                    source_type = "raw"
+
+            # Get and prepare data based on source type
+            try:
+                if source_type == "features":
+                    feature_data = st.session_state.feature_cache[data_key]
+
+                    # Debug: Show feature data structure
+                    st.write(f"Debug: Processing feature data for key '{data_key}'")
+                    st.write(f"Debug: Feature data type: {type(feature_data)}")
+
+                    # Check if this is a technical indicator DataFrame without price data
+                    if isinstance(feature_data, pd.DataFrame):
+                        columns_lower = [col.lower() for col in feature_data.columns]
+                        price_indicators = [
+                            "open",
+                            "high",
+                            "low",
+                            "close",
+                            "volume",
+                            "price",
+                            "adj",
+                        ]
+                        has_price_data = any(
+                            any(indicator in col for indicator in price_indicators)
+                            for col in columns_lower
+                        )
+
+                        if not has_price_data:
+                            st.write(
+                                f"Debug: DataFrame '{data_key}' does not contain price data"
+                            )
+                            # Try to find corresponding metadata
+                            metadata_key = f"{data_key}_metadata"
+                            if metadata_key in st.session_state.feature_cache:
+                                st.write(
+                                    f"Debug: Found metadata key '{metadata_key}', extracting original data"
+                                )
+                                metadata = st.session_state.feature_cache[metadata_key]
+                                if (
+                                    isinstance(metadata, dict)
+                                    and "original_data" in metadata
+                                ):
+                                    feature_data = metadata["original_data"]
+                                    st.write(
+                                        f"Debug: Using original_data from metadata: {feature_data.shape}"
+                                    )
+                                else:
+                                    st.error(
+                                        f"Metadata '{metadata_key}' does not contain original_data"
+                                    )
+                                    return
+                            else:
+                                st.error(
+                                    f"No metadata found for '{data_key}' and DataFrame does not contain price data"
+                                )
+                                return
+
+                    if isinstance(feature_data, dict):
+                        st.write(
+                            f"Debug: Feature data keys: {list(feature_data.keys())}"
+                        )
+
+                        # Try different extraction methods with priority order
+                        extracted_data = None
+
+                        # Method 1: Look for original_data first (metadata structure)
+                        for key_name in [
+                            "original_data",
+                            "raw_data",
+                            "source_data",
+                            "data",
+                        ]:
+                            if key_name in feature_data:
+                                potential_data = feature_data[key_name]
+                                st.write(
+                                    f"Debug: Found '{key_name}': {type(potential_data)}"
+                                )
+                                if (
+                                    isinstance(potential_data, pd.DataFrame)
+                                    and not potential_data.empty
+                                ):
+                                    st.write(
+                                        f"Debug: DataFrame shape: {potential_data.shape}"
+                                    )
+                                    st.write(
+                                        f"Debug: DataFrame columns: {list(potential_data.columns)}"
+                                    )
+
+                                    # Check if it looks like OHLCV data
+                                    columns_lower = [
+                                        col.lower() for col in potential_data.columns
+                                    ]
+                                    price_indicators = [
+                                        "open",
+                                        "high",
+                                        "low",
+                                        "close",
+                                        "volume",
+                                        "price",
+                                    ]
+                                    has_price_data = any(
+                                        any(
+                                            indicator in col
+                                            for indicator in price_indicators
+                                        )
+                                        for col in columns_lower
+                                    )
+
+                                    if has_price_data:
+                                        st.write(
+                                            f"Debug: '{key_name}' contains price data - using for backtesting"
+                                        )
+                                        extracted_data = potential_data
+                                        break
+                                    else:
+                                        st.write(
+                                            f"Debug: '{key_name}' does not contain price data, skipping"
+                                        )
+
+                        if extracted_data is None:
+                            st.error(
+                                f"Could not extract price data from feature cache key '{data_key}'"
+                            )
+                            st.write("Available data structure:")
+                            for k, v in feature_data.items():
+                                if isinstance(v, pd.DataFrame):
+                                    st.write(f"  - {k}: {type(v)} {v.shape}")
+                                    st.write(f"    Columns: {list(v.columns)}")
+                                else:
+                                    st.write(
+                                        f"  - {k}: {type(v)} {getattr(v, 'shape', 'no shape')}"
+                                    )
+                            return
+
+                        data = data_preparer._validate_price_data(extracted_data)
+                    else:
+                        # Direct DataFrame
+                        data = data_preparer._validate_price_data(feature_data)
+
+                else:  # raw data
+                    raw_data_item = st.session_state.data_cache[data_key]
+                    if isinstance(raw_data_item, dict) and "data" in raw_data_item:
+                        raw_data = raw_data_item["data"]
+                    else:
+                        raw_data = raw_data_item
+                    data = data_preparer._validate_price_data(raw_data)
+
+            except Exception as e:
+                st.error(f"Failed to prepare data: {e}")
+                st.error(f"Data key: {data_key}, Source type: {source_type}")
+                if st.checkbox("Show detailed error", key="show_data_prep_error"):
+                    st.error(traceback.format_exc())
+                return
+
+            if data is None or data.empty:
+                st.error("No valid data available for backtesting")
+                return
 
             symbols = [data_key]
 
             # Step 2: Initialize backtest engine
             display_computation_status("⚙️ Initializing backtest engine...", 0.2)
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-            engine = BacktestEngine(
-                initial_capital=backtest_config["initial_capital"],
-                commission_rate=backtest_config["commission_rate"],
-                slippage_rate=backtest_config["slippage_rate"],
-                min_commission=backtest_config["min_commission"],
-                max_position_size=backtest_config["max_position_size"],
-            )
+            try:
+                engine = BacktestEngine(
+                    initial_capital=backtest_config.get("initial_capital", 100000.0),
+                    commission_rate=backtest_config.get("commission_rate", 0.001),
+                    slippage_rate=backtest_config.get("slippage_rate", 0.0005),
+                    min_commission=backtest_config.get("min_commission", 1.0),
+                    max_position_size=backtest_config.get("max_position_size", 0.1),
+                )
+            except Exception as e:
+                st.error(f"Failed to initialize backtest engine: {e}")
+                return
 
             # Add data to engine
             symbol = symbols[0] if symbols else "ASSET"
-            engine.add_data(symbol, data)
+            try:
+                engine.add_data(symbol, data)
+            except Exception as e:
+                st.error(f"Failed to add data to engine: {e}")
+                return
 
             # Step 3: Build strategy
-            display_computation_status("🎯 Building strategy...", 0.3)
-            time.sleep(0.5)
+            display_computation_status("🎯 Building strategy...", 0.4)
+            time.sleep(0.3)
 
-            if strategy_config["strategy_type"] == "Model-Based":
-                # Check if models are available
-                if (
-                    "model_cache" not in st.session_state
-                    or not st.session_state.model_cache
-                ):
-                    st.error("No models available for model-based strategy")
-                    return
+            try:
+                if strategy_config.get("strategy_type") == "Model-Based":
+                    # Check if models are available
+                    if (
+                        "model_cache" not in st.session_state
+                        or not st.session_state.model_cache
+                    ):
+                        st.error("No models available for model-based strategy")
+                        return
 
-                # Use first available model for demo
-                model_key = list(st.session_state.model_cache.keys())[0]
-                model_info = st.session_state.model_cache[model_key]
-                strategy = create_model_strategy(
-                    model_info, symbol, strategy_config["parameters"]
-                )
-            else:
-                strategy = strategy_builder.build_strategy(strategy_config, [symbol])
+                    # Use first available model for demo
+                    model_key = list(st.session_state.model_cache.keys())[0]
+                    model_info = st.session_state.model_cache[model_key]
+                    strategy = create_model_strategy(
+                        model_info, symbol, strategy_config.get("parameters", {})
+                    )
+                else:
+                    strategy = strategy_builder.build_strategy(
+                        strategy_config, [symbol]
+                    )
+            except Exception as e:
+                st.error(f"Failed to build strategy: {e}")
+                return
 
             # Step 4: Run backtest
-            display_computation_status("🚀 Running backtest...", 0.5)
-            time.sleep(1.0)
+            display_computation_status("🚀 Running backtest...", 0.6)
+            time.sleep(0.5)
 
-            engine.set_strategy(strategy)
+            try:
+                engine.set_strategy(strategy)
 
-            # Set date range if specified
-            start_date = backtest_config.get("start_date")
-            end_date = backtest_config.get("end_date")
+                # Set date range if specified and convert to proper format
+                start_date = backtest_config.get("start_date")
+                end_date = backtest_config.get("end_date")
 
-            raw_results = engine.run_backtest(start_date=start_date, end_date=end_date)
+                # Convert date objects to datetime if needed
+                if start_date is not None:
+                    import datetime as dt
+
+                    if isinstance(start_date, dt.date) and not isinstance(
+                        start_date, dt.datetime
+                    ):
+                        # Convert date to datetime at midnight
+                        start_date = pd.Timestamp.combine(start_date, dt.time.min)
+                    elif hasattr(start_date, "date") and not isinstance(
+                        start_date, pd.Timestamp
+                    ):
+                        start_date = pd.Timestamp(start_date)
+                    elif isinstance(start_date, str):
+                        start_date = pd.to_datetime(start_date)
+                    else:
+                        start_date = pd.Timestamp(start_date)
+
+                if end_date is not None:
+                    import datetime as dt
+
+                    if isinstance(end_date, dt.date) and not isinstance(
+                        end_date, dt.datetime
+                    ):
+                        # Convert date to datetime at end of day
+                        end_date = pd.Timestamp.combine(end_date, dt.time.max)
+                    elif hasattr(end_date, "date") and not isinstance(
+                        end_date, pd.Timestamp
+                    ):
+                        end_date = pd.Timestamp(end_date)
+                    elif isinstance(end_date, str):
+                        end_date = pd.to_datetime(end_date)
+                    else:
+                        end_date = pd.Timestamp(end_date)
+
+                st.write(f"Debug: Running backtest from {start_date} to {end_date}")
+
+                raw_results = engine.run_backtest(
+                    start_date=start_date, end_date=end_date
+                )
+            except Exception as e:
+                st.error(f"Failed to run backtest: {e}")
+                if st.checkbox(
+                    "Show detailed backtest error", key="show_backtest_error"
+                ):
+                    st.error(traceback.format_exc())
+                return
 
             # Step 5: Process results
             display_computation_status("📊 Processing results...", 0.8)
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-            results = result_processor.process_results(engine, backtest_config)
+            try:
+                results = result_processor.process_results(engine, backtest_config)
+            except Exception as e:
+                st.error(f"Failed to process results: {e}")
+                # Create minimal results for basic functionality
+                results = {
+                    "portfolio_values": (
+                        engine.portfolio_values
+                        if hasattr(engine, "portfolio_values")
+                        else []
+                    ),
+                    "returns": pd.Series(),
+                    "trades": [],
+                    "summary": {"total_return": 0.0},
+                    "metrics": None,
+                }
 
             # Step 6: Store results
             display_computation_status("💾 Storing results...", 0.9)
-            time.sleep(0.3)
+            time.sleep(0.2)
 
-            backtest_id = f"{strategy_config['strategy_type']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            backtest_id = f"{strategy_config.get('strategy_type', 'Unknown')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             st.session_state.backtest_cache[backtest_id] = {
                 **results,
@@ -404,7 +903,8 @@ def run_comprehensive_backtest(
 
     except Exception as e:
         st.error(f"Backtest failed: {str(e)}")
-        st.error(traceback.format_exc())
+        if st.checkbox("Show detailed error information"):
+            st.error(traceback.format_exc())
 
     finally:
         # Reset running status
@@ -515,65 +1015,107 @@ def display_quick_results(backtest_id: str):
     """Display quick backtest results"""
 
     if backtest_id not in st.session_state.backtest_cache:
+        st.error(f"Backtest {backtest_id} not found in cache")
         return
 
-    result = st.session_state.backtest_cache[backtest_id]
+    try:
+        result = st.session_state.backtest_cache[backtest_id]
 
-    st.subheader(f"📊 Quick Results: {backtest_id}")
+        st.subheader(f"📊 Quick Results: {backtest_id}")
 
-    # Key metrics
-    metrics = result.get("metrics")
-    if metrics:
+        # Key metrics with error handling
+        metrics = result.get("metrics")
+        summary = result.get("summary", {})
+
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            total_return = getattr(metrics, "total_return", 0) * 100
+            if metrics and hasattr(metrics, "total_return"):
+                total_return = getattr(metrics, "total_return", 0) * 100
+            else:
+                total_return = summary.get("total_return", 0)
+                if isinstance(total_return, str):
+                    try:
+                        total_return = float(total_return.replace("%", ""))
+                    except:
+                        total_return = 0.0
             st.metric("Total Return", f"{total_return:.2f}%")
 
         with col2:
-            sharpe_ratio = getattr(metrics, "sharpe_ratio", 0)
+            if metrics and hasattr(metrics, "sharpe_ratio"):
+                sharpe_ratio = getattr(metrics, "sharpe_ratio", 0)
+            else:
+                sharpe_ratio = summary.get("sharpe_ratio", 0.0)
+                if isinstance(sharpe_ratio, str):
+                    try:
+                        sharpe_ratio = float(sharpe_ratio)
+                    except:
+                        sharpe_ratio = 0.0
             st.metric("Sharpe Ratio", f"{sharpe_ratio:.3f}")
 
         with col3:
-            max_drawdown = getattr(metrics, "max_drawdown", 0) * 100
+            if metrics and hasattr(metrics, "max_drawdown"):
+                max_drawdown = getattr(metrics, "max_drawdown", 0) * 100
+            else:
+                max_drawdown = summary.get("max_drawdown", 0.0)
+                if isinstance(max_drawdown, str):
+                    try:
+                        max_drawdown = float(max_drawdown.replace("%", ""))
+                    except:
+                        max_drawdown = 0.0
             st.metric("Max Drawdown", f"{max_drawdown:.2f}%")
 
         with col4:
             num_trades = len(result.get("trades", []))
             st.metric("Total Trades", num_trades)
 
-    # Quick chart
-    portfolio_values = result.get("portfolio_values", [])
-    if len(portfolio_values) > 1:
-        st.subheader("📈 Portfolio Performance")
+        # Quick chart with error handling
+        portfolio_values = result.get("portfolio_values", [])
+        if len(portfolio_values) > 1:
+            st.subheader("📈 Portfolio Performance")
 
-        fig = go.Figure()
+            try:
+                fig = go.Figure()
 
-        dates = pd.date_range(
-            start=datetime.now() - timedelta(days=len(portfolio_values)),
-            periods=len(portfolio_values),
-            freq="D",
-        )
+                # Create dates - try to use actual dates from data if available
+                if "returns" in result and hasattr(result["returns"], "index"):
+                    dates = result["returns"].index[: len(portfolio_values)]
+                else:
+                    dates = pd.date_range(
+                        start=datetime.now() - timedelta(days=len(portfolio_values)),
+                        periods=len(portfolio_values),
+                        freq="D",
+                    )
 
-        fig.add_trace(
-            go.Scatter(
-                x=dates,
-                y=portfolio_values,
-                mode="lines",
-                name="Portfolio Value",
-                line=dict(color="blue", width=2),
-            )
-        )
+                fig.add_trace(
+                    go.Scatter(
+                        x=dates,
+                        y=portfolio_values,
+                        mode="lines",
+                        name="Portfolio Value",
+                        line=dict(color="blue", width=2),
+                    )
+                )
 
-        fig.update_layout(
-            title="Portfolio Value Over Time",
-            xaxis_title="Date",
-            yaxis_title="Portfolio Value ($)",
-            template="plotly_white",
-            height=300,
-        )
+                fig.update_layout(
+                    title="Portfolio Value Over Time",
+                    xaxis_title="Date",
+                    yaxis_title="Portfolio Value ($)",
+                    template="plotly_white",
+                    height=300,
+                )
 
-        st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.warning(f"Could not create performance chart: {e}")
+        else:
+            st.info("Insufficient portfolio data for chart display")
+
+    except Exception as e:
+        st.error(f"Error displaying quick results: {e}")
+        if st.checkbox("Show error details", key=f"error_details_{backtest_id}"):
+            st.error(traceback.format_exc())
 
 
 def results_analysis_workflow():
@@ -866,39 +1408,91 @@ def export_all_results():
         st.warning("No results to export")
         return
 
-    # Create export data
-    export_data = {
-        "export_timestamp": datetime.now().isoformat(),
-        "total_backtests": len(st.session_state.backtest_cache),
-        "backtests": {},
-    }
-
-    for backtest_id, result in st.session_state.backtest_cache.items():
-        # Create exportable version (remove non-serializable objects)
-        export_result = {
-            "id": backtest_id,
-            "strategy_config": result.get("strategy_config", {}),
-            "backtest_config": result.get("backtest_config", {}),
-            "portfolio_values": result.get("portfolio_values", []),
-            "returns": result.get("returns", pd.Series()).tolist(),
-            "trades": result.get("trades", []),
-            "summary": result.get("summary", {}),
-            "timestamp": result.get("timestamp", datetime.now()).isoformat(),
+    try:
+        # Create export data
+        export_data = {
+            "export_timestamp": datetime.now().isoformat(),
+            "total_backtests": len(st.session_state.backtest_cache),
+            "backtests": {},
         }
 
-        export_data["backtests"][backtest_id] = export_result
+        for backtest_id, result in st.session_state.backtest_cache.items():
+            try:
+                # Create exportable version (remove non-serializable objects)
+                export_result = {
+                    "id": backtest_id,
+                    "strategy_config": result.get("strategy_config", {}),
+                    "backtest_config": result.get("backtest_config", {}),
+                    "portfolio_values": result.get("portfolio_values", []),
+                    "summary": result.get("summary", {}),
+                    "data_source": result.get("data_source", ""),
+                    "symbol": result.get("symbol", ""),
+                    "timestamp": result.get("timestamp", datetime.now()).isoformat(),
+                }
 
-    # Convert to JSON
-    export_json = json.dumps(export_data, indent=2, default=str)
+                # Handle returns data safely
+                returns_data = result.get("returns", pd.Series())
+                if hasattr(returns_data, "tolist"):
+                    export_result["returns"] = returns_data.tolist()
+                elif isinstance(returns_data, list):
+                    export_result["returns"] = returns_data
+                else:
+                    export_result["returns"] = []
 
-    # Download button
-    st.download_button(
-        label="📥 Download All Results (JSON)",
-        data=export_json,
-        file_name=f"backtest_results_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
+                # Handle trades data safely
+                trades_data = result.get("trades", [])
+                if isinstance(trades_data, list):
+                    export_result["trades"] = trades_data
+                else:
+                    export_result["trades"] = []
+
+                # Handle metrics safely
+                metrics = result.get("metrics")
+                if metrics:
+                    export_result["metrics"] = {
+                        "total_return": getattr(metrics, "total_return", 0),
+                        "sharpe_ratio": getattr(metrics, "sharpe_ratio", 0),
+                        "max_drawdown": getattr(metrics, "max_drawdown", 0),
+                        "volatility": getattr(metrics, "volatility", 0),
+                        "win_rate": getattr(metrics, "win_rate", 0),
+                    }
+
+                export_data["backtests"][backtest_id] = export_result
+
+            except Exception as e:
+                st.warning(f"Failed to export backtest {backtest_id}: {e}")
+                continue
+
+        # Convert to JSON with error handling
+        try:
+            export_json = json.dumps(export_data, indent=2, default=str)
+        except Exception as e:
+            st.error(f"Failed to convert results to JSON: {e}")
+            return
+
+        # Create downloadable data
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"qat_backtest_results_{timestamp}.json"
+
+        # Download button
+        st.download_button(
+            label="📥 Download All Results (JSON)",
+            data=export_json,
+            file_name=filename,
+            mime="application/json",
+            use_container_width=True,
+            help="Download all backtest results in JSON format",
+        )
+
+        # Success message
+        st.success(
+            f"✅ Export prepared: {len(export_data['backtests'])} backtest(s) ready for download"
+        )
+
+    except Exception as e:
+        st.error(f"Export failed: {e}")
+        if st.checkbox("Show export error details"):
+            st.error(traceback.format_exc())
 
 
 if __name__ == "__main__":

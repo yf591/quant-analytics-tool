@@ -39,6 +39,36 @@ class BacktestDataPreparer:
     def __init__(self):
         pass
 
+    def find_metadata_for_features(
+        self, feature_key: str, session_state
+    ) -> Optional[pd.DataFrame]:
+        """
+        Find corresponding metadata for a feature DataFrame that lacks price data
+
+        Args:
+            feature_key: Key of the feature cache entry
+            session_state: Streamlit session state containing feature_cache
+
+        Returns:
+            Original price data from metadata if found, None otherwise
+        """
+        metadata_key = f"{feature_key}_metadata"
+
+        if (
+            hasattr(session_state, "feature_cache")
+            and metadata_key in session_state.feature_cache
+        ):
+            metadata = session_state.feature_cache[metadata_key]
+            if isinstance(metadata, dict) and "original_data" in metadata:
+                original_data = metadata["original_data"]
+                if isinstance(original_data, pd.DataFrame):
+                    print(
+                        f"Found original_data in metadata '{metadata_key}': {original_data.shape}"
+                    )
+                    return original_data
+
+        return None
+
     def prepare_feature_data(
         self, feature_data: Union[pd.DataFrame, Dict]
     ) -> pd.DataFrame:
@@ -56,22 +86,36 @@ class BacktestDataPreparer:
         if isinstance(feature_data, dict):
             print(f"Feature data keys: {list(feature_data.keys())}")
 
-            # Check for raw data first
+            # Check for original_data first (common in metadata)
+            if "original_data" in feature_data:
+                original_data = feature_data["original_data"]
+                if isinstance(original_data, pd.DataFrame):
+                    print(
+                        f"Found original_data with columns: {list(original_data.columns)}"
+                    )
+                    return self._validate_price_data(original_data)
+
+            # Check for raw data
             if "raw_data" in feature_data:
                 raw_data = feature_data["raw_data"]
                 if isinstance(raw_data, pd.DataFrame):
+                    print(f"Found raw_data with columns: {list(raw_data.columns)}")
                     return self._validate_price_data(raw_data)
 
-            # Check for original data
+            # Check for data
             if "data" in feature_data:
                 data = feature_data["data"]
                 if isinstance(data, pd.DataFrame):
+                    print(f"Found data with columns: {list(data.columns)}")
                     return self._validate_price_data(data)
 
             # Check for source data
             if "source_data" in feature_data:
                 source_data = feature_data["source_data"]
                 if isinstance(source_data, pd.DataFrame):
+                    print(
+                        f"Found source_data with columns: {list(source_data.columns)}"
+                    )
                     return self._validate_price_data(source_data)
 
             # Try to reconstruct from features
@@ -81,31 +125,102 @@ class BacktestDataPreparer:
                     # Look for price-related features
                     price_data = {}
 
-                    # Try to find basic price data
+                    print(f"Available feature columns: {list(features.keys())}")
+
+                    # Try to find basic price data with multiple strategies
                     for name, series in features.items():
                         if isinstance(series, pd.Series):
                             name_lower = name.lower()
-                            if "price" in name_lower and "close" not in name_lower:
-                                # This might be the main price series
+
+                            # Primary price matching
+                            if any(
+                                keyword in name_lower
+                                for keyword in ["close", "adj_close", "adjusted_close"]
+                            ):
                                 price_data["Close"] = series
-                            elif "close" in name_lower:
-                                price_data["Close"] = series
-                            elif "open" in name_lower:
+                            elif (
+                                any(keyword in name_lower for keyword in ["open"])
+                                and "close" not in name_lower
+                            ):
                                 price_data["Open"] = series
-                            elif "high" in name_lower:
+                            elif (
+                                any(keyword in name_lower for keyword in ["high"])
+                                and "close" not in name_lower
+                            ):
                                 price_data["High"] = series
-                            elif "low" in name_lower:
+                            elif (
+                                any(keyword in name_lower for keyword in ["low"])
+                                and "close" not in name_lower
+                            ):
                                 price_data["Low"] = series
-                            elif "volume" in name_lower:
+                            elif any(
+                                keyword in name_lower for keyword in ["volume", "vol"]
+                            ):
                                 price_data["Volume"] = series
+                            # Fallback: any column with 'price' in name becomes Close
+                            elif "price" in name_lower and "Close" not in price_data:
+                                price_data["Close"] = series
+
+                    print(f"Extracted price columns: {list(price_data.keys())}")
 
                     if price_data:
                         df = pd.DataFrame(price_data)
                         return self._validate_price_data(df)
 
+            # Look for any DataFrame in the top level of the dict
+            if isinstance(feature_data, dict):
+                for key, value in feature_data.items():
+                    if isinstance(value, pd.DataFrame):
+                        print(
+                            f"Found DataFrame in key '{key}', columns: {list(value.columns)}"
+                        )
+                        # Check if it looks like price data
+                        columns_lower = [col.lower() for col in value.columns]
+                        if any(
+                            col in columns_lower
+                            for col in ["close", "open", "high", "low", "price"]
+                        ):
+                            return self._validate_price_data(value)
+
+            # Final attempt: try to extract the first DataFrame found
+            if isinstance(feature_data, dict):
+                for key, value in feature_data.items():
+                    if isinstance(value, pd.DataFrame) and not value.empty:
+                        print(f"Using DataFrame from key '{key}' as fallback")
+                        return self._validate_price_data(value)
+
         elif isinstance(feature_data, pd.DataFrame):
-            # Already in DataFrame format
-            return self._validate_price_data(feature_data)
+            # Already in DataFrame format - check if it contains price data
+            print(
+                f"Processing direct DataFrame with columns: {list(feature_data.columns)}"
+            )
+            columns_lower = [col.lower() for col in feature_data.columns]
+
+            # Check if this looks like price data (OHLCV)
+            price_indicators = [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "price",
+                "adj",
+            ]
+            has_price_data = any(
+                any(indicator in col for indicator in price_indicators)
+                for col in columns_lower
+            )
+
+            if has_price_data:
+                print("DataFrame appears to contain price data")
+                return self._validate_price_data(feature_data)
+            else:
+                print(
+                    "DataFrame does not contain obvious price data - cannot use for backtesting"
+                )
+                raise ValueError(
+                    "DataFrame does not contain price data (OHLCV) required for backtesting"
+                )
 
         # If we can't extract proper price data, create a simple synthetic dataset
         # This is a fallback for demonstration purposes
@@ -179,25 +294,42 @@ class BacktestDataPreparer:
 
         # Create missing OHLC from Close if needed
         if "Close" in available_cols:
+            # Ensure Close is properly numeric
+            data["Close"] = pd.to_numeric(data["Close"], errors="coerce").dropna()
+
             if "Open" not in available_cols:
                 data["Open"] = data["Close"].shift(1).fillna(data["Close"])
                 available_cols.append("Open")
+            else:
+                data["Open"] = pd.to_numeric(data["Open"], errors="coerce").fillna(
+                    data["Close"]
+                )
 
             if "High" not in available_cols:
                 # High should be at least as high as Open and Close
                 data["High"] = data[["Open", "Close"]].max(axis=1)
                 # Add some random variation to make it more realistic
+                np.random.seed(42)  # For reproducibility
                 variation = np.random.uniform(1.0, 1.02, len(data))
                 data["High"] = data["High"] * variation
                 available_cols.append("High")
+            else:
+                data["High"] = pd.to_numeric(data["High"], errors="coerce").fillna(
+                    data[["Open", "Close"]].max(axis=1)
+                )
 
             if "Low" not in available_cols:
                 # Low should be at most as low as Open and Close
                 data["Low"] = data[["Open", "Close"]].min(axis=1)
                 # Add some random variation to make it more realistic
+                np.random.seed(42)  # For reproducibility
                 variation = np.random.uniform(0.98, 1.0, len(data))
                 data["Low"] = data["Low"] * variation
                 available_cols.append("Low")
+            else:
+                data["Low"] = pd.to_numeric(data["Low"], errors="coerce").fillna(
+                    data[["Open", "Close"]].min(axis=1)
+                )
 
             if "Volume" not in available_cols:
                 # Generate synthetic volume if not available
