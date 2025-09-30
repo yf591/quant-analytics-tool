@@ -479,8 +479,9 @@ def calculate_risk_metrics(
                 confidence_level=confidence_level, min_periods=30
             )
 
-            # Calculate basic risk metrics
-            volatility = returns.std() * np.sqrt(252)  # Annualized
+            # Calculate basic risk metrics using backend
+            risk_adj_metrics = risk_metrics.risk_adjusted_returns(returns)
+            volatility = risk_adj_metrics.get("annual_volatility", 0)
             skewness = returns.skew()
             kurtosis = returns.kurtosis()
 
@@ -559,11 +560,18 @@ def optimize_portfolio(
             # Use existing Week 12 optimization modules
             optimizer = PortfolioOptimizer()
 
-            # Create mock multi-asset returns for optimization
+            # Create mock multi-asset returns for optimization using backend risk metrics
+            from src.risk.risk_metrics import RiskMetrics
+
+            risk_calc = RiskMetrics()
+            risk_adj = risk_calc.risk_adjusted_returns(returns)
+            annual_vol = risk_adj.get("annual_volatility", 0.2)
+            daily_vol = annual_vol / np.sqrt(252)
+
             num_assets = 4
             mock_returns = np.random.multivariate_normal(
                 mean=[returns.mean()] * num_assets,
-                cov=np.eye(num_assets) * returns.var(),
+                cov=np.eye(num_assets) * (daily_vol**2),
                 size=len(returns),
             )
             returns_df = pd.DataFrame(
@@ -919,6 +927,11 @@ def display_risk_metrics_charts(analysis: dict):
 
     returns = analysis["returns"]
 
+    # Create RiskMetrics instance for calculations
+    from src.risk.risk_metrics import RiskMetrics
+
+    risk_metrics = RiskMetrics()
+
     # Create risk metrics charts
     fig = make_subplots(
         rows=2,
@@ -936,16 +949,28 @@ def display_risk_metrics_charts(analysis: dict):
         go.Histogram(x=returns, nbinsx=50, name="Returns", opacity=0.7), row=1, col=1
     )
 
-    # Rolling volatility
-    rolling_vol = returns.rolling(30).std() * np.sqrt(252)
+    # Rolling volatility using backend risk metrics
+    rolling_vol = returns.rolling(30).apply(
+        lambda x: (
+            risk_metrics.risk_adjusted_returns(x).get("annual_volatility", 0)
+            if len(x) >= 30
+            else np.nan
+        )
+    )
     fig.add_trace(
         go.Scatter(x=returns.index, y=rolling_vol, mode="lines", name="Rolling Vol"),
         row=1,
         col=2,
     )
 
-    # Rolling VaR
-    rolling_var = returns.rolling(30).quantile(0.05)
+    # Rolling VaR using backend risk metrics
+    rolling_var = returns.rolling(30).apply(
+        lambda x: (
+            risk_metrics.value_at_risk(x, method="historical")
+            if len(x) >= 30
+            else np.nan
+        )
+    )
     fig.add_trace(
         go.Scatter(x=returns.index, y=rolling_var, mode="lines", name="Rolling VaR"),
         row=2,
@@ -1398,9 +1423,8 @@ def display_optimization_results():
         )
 
     with col3:
-        expected_return = result.get("expected_return", 0)
-        volatility = result.get("volatility", 0)
-        sharpe = expected_return / volatility if volatility > 0 else 0
+        # Use backend risk metrics for Sharpe ratio calculation
+        sharpe = result.get("sharpe_ratio", 0)
         st.metric("Sharpe Ratio", f"{sharpe:.3f}", delta=None)
 
     # Optimization details
@@ -1638,7 +1662,7 @@ def calculate_risk_metrics(
             "sharpe_ratio": risk_adjusted.get("sharpe_ratio", 0.0),
             "sortino_ratio": risk_adjusted.get("sortino_ratio", 0.0),
             "calmar_ratio": risk_adjusted.get("calmar_ratio", 0.0),
-            "volatility": backtest_data.std() * np.sqrt(252),  # Annualized volatility
+            "volatility": risk_adjusted.get("annual_volatility", 0.0),
             "skewness": backtest_data.skew(),
             "kurtosis": backtest_data.kurtosis(),
         }
@@ -1669,16 +1693,27 @@ def optimize_portfolio(
 
         optimizer = PortfolioOptimizer()
 
-        # Prepare data for optimization
+        # Prepare data for optimization using backend risk metrics
+        from src.risk.risk_metrics import RiskMetrics
+
+        risk_calc = RiskMetrics()
+
         if isinstance(backtest_data, pd.DataFrame):
-            expected_returns = backtest_data.mean() * 252  # Annualized
-            cov_matrix = (
-                backtest_data.cov() * 252
-            )  # Covariance matrix for multiple assets
+            # Multi-asset case - Note: This is a temporary simple annualization
+            # TODO: Replace with individual backend risk_adjusted_returns() calls for each asset
+            expected_returns = (
+                backtest_data.mean() * 252
+            )  # TEMPORARY: Simple annualization - should use backend for each asset
+            cov_matrix = backtest_data.cov() * 252  # Covariance annualization
         else:
-            # Single asset case - backtest_data is a Series
-            expected_returns = backtest_data.mean() * 252  # Scalar value
-            cov_matrix = backtest_data.var() * 252  # Variance for single asset
+            # Single asset case - backtest_data is a Series using backend risk metrics
+            from src.risk.risk_metrics import RiskMetrics
+
+            risk_calc = RiskMetrics()
+            risk_adj = risk_calc.risk_adjusted_returns(backtest_data)
+            expected_returns = risk_adj.get("annual_return", 0)  # Scalar value
+            annual_vol = risk_adj.get("annual_volatility", 0)
+            cov_matrix = annual_vol**2  # Variance from backend calculation
 
         if optimization_method == "Mean Variance":
             if isinstance(backtest_data, pd.DataFrame):
@@ -1799,8 +1834,14 @@ def run_stress_test(backtest_key, stress_type, scenario_params, num_simulations)
                 portfolio_weights=portfolio_weights, asset_returns=returns_df
             )
         elif stress_type == "Monte Carlo":
-            expected_returns = np.array([backtest_data.mean() * 252])
-            cov_matrix = np.array([[backtest_data.var() * 252]])
+            # Use backend risk metrics for Monte Carlo parameters
+            from src.risk.risk_metrics import RiskMetrics
+
+            risk_calc = RiskMetrics()
+            risk_adj = risk_calc.risk_adjusted_returns(backtest_data)
+            expected_returns = np.array([risk_adj.get("annual_return", 0)])
+            annual_vol = risk_adj.get("annual_volatility", 0)
+            cov_matrix = np.array([[annual_vol**2]])
             results = stress_tester.run_monte_carlo_stress_test(
                 portfolio_weights=portfolio_weights,
                 expected_returns=expected_returns,

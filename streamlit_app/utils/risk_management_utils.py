@@ -177,8 +177,9 @@ class RiskManagementProcessor:
             # Basic risk metrics
             metrics = {}
 
-            # Volatility (annualized)
-            metrics["volatility"] = returns.std() * np.sqrt(252)
+            # Volatility (annualized) using backend risk metrics
+            risk_adj_metrics = risk_calc.risk_adjusted_returns(returns)
+            metrics["volatility"] = risk_adj_metrics.get("annual_volatility", 0)
 
             # Value at Risk
             if var_method == "Historical":
@@ -260,8 +261,17 @@ class RiskManagementProcessor:
             elif method == "Risk Parity":
                 # For single asset, use volatility targeting
                 target_vol = kwargs.get("target_volatility", 0.15)
-                current_vol = returns.std() * np.sqrt(252)
-                position_size = target_vol / current_vol if current_vol > 0 else 0
+                # Use backend risk metrics for volatility calculation
+                # Use backend volatility targeting instead of direct calculation
+                temp_risk_calc = RiskMetrics()
+                risk_adj = temp_risk_calc.risk_adjusted_returns(returns)
+                current_vol = risk_adj.get("annual_volatility", 0)
+                # Use PositionSizer's volatility_targeting method instead of direct division
+                position_size = sizer.volatility_targeting(
+                    current_volatility=current_vol,
+                    target_volatility=target_vol,
+                    base_position=1.0,
+                )
 
             elif method == "Volatility Targeting":
                 target_vol = kwargs.get("target_volatility", 0.15)
