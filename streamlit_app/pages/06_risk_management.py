@@ -84,41 +84,168 @@ def main():
     num_backtests = len(st.session_state.backtest_cache)
     st.success(f"✅ {num_backtests} backtest(s) available for risk analysis")
 
-    # Professional UI Layout
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        risk_control_panel()
-
-    with col2:
-        risk_display_panel()
-
-
-def risk_control_panel():
-    """Risk Management Control Panel"""
-
-    st.subheader("🎯 Risk Analysis Configuration")
+    # Professional Risk Management Workflow - Vertical Layout
+    st.header("🎯 Risk Analysis Workflow")
 
     # Backtest selection
+    st.subheader("📊 Select Backtest for Analysis")
     available_backtests = list(st.session_state.backtest_cache.keys())
-    selected_backtest = st.selectbox("Select Backtest", available_backtests)
+    selected_backtest = st.selectbox(
+        "Choose backtest result",
+        available_backtests,
+        help="Select the backtest result to analyze for risk metrics",
+    )
 
     if not selected_backtest:
+        st.info("Please select a backtest to continue with risk analysis")
         return
 
-    # Risk analysis type
-    st.subheader("🛡️ Risk Analysis Types")
-
-    tab1, tab2, tab3 = st.tabs(["Portfolio Risk", "Optimization", "Stress Testing"])
+    # Risk analysis tabs
+    st.subheader("🛡️ Risk Analysis Tools")
+    tab1, tab2, tab3 = st.tabs(
+        ["📊 Portfolio Risk", "⚖️ Optimization", "🔥 Stress Testing"]
+    )
 
     with tab1:
-        portfolio_risk_config(selected_backtest)
+        portfolio_risk_workflow(selected_backtest)
 
     with tab2:
-        portfolio_optimization_config(selected_backtest)
+        portfolio_optimization_workflow(selected_backtest)
 
     with tab3:
-        stress_testing_config(selected_backtest)
+        stress_testing_workflow(selected_backtest)
+
+
+def portfolio_risk_workflow(backtest_key: str):
+    """Portfolio Risk Analysis Workflow"""
+
+    st.markdown("### 📊 Portfolio Risk Metrics")
+    st.markdown(
+        "Analyze comprehensive risk metrics including VaR, CVaR, and drawdown analysis."
+    )
+
+    # Risk calculation parameters
+    col1, col2 = st.columns(2)
+
+    with col1:
+        confidence_level = st.slider("Confidence Level (%)", 90, 99, 95) / 100
+        lookback_days = st.slider("Lookback Days", 30, 252, 126)
+
+    with col2:
+        var_method = st.selectbox(
+            "VaR Method", ["Historical", "Parametric", "Cornish-Fisher"]
+        )
+        enable_decomposition = st.checkbox("Enable Risk Decomposition", value=True)
+
+    # Calculate button
+    if st.button("📊 Calculate Risk Metrics", type="primary", use_container_width=True):
+        with st.spinner("Calculating risk metrics..."):
+            calculate_risk_metrics(
+                backtest_key,
+                confidence_level,
+                lookback_days,
+                var_method,
+                enable_decomposition,
+            )
+
+    # Results section
+    st.markdown("---")
+    st.markdown("### 📊 Risk Analysis Results")
+
+    if f"risk_metrics_{backtest_key}" in st.session_state.risk_cache:
+        display_risk_metrics_results(backtest_key)
+    else:
+        st.info(
+            "Configure parameters and click 'Calculate Risk Metrics' to see results"
+        )
+
+
+def portfolio_optimization_workflow(backtest_key: str):
+    """Portfolio Optimization Workflow"""
+
+    st.markdown("### ⚖️ Portfolio Optimization")
+    st.markdown(
+        "Optimize portfolio allocation using modern portfolio theory and advanced methods."
+    )
+
+    # Optimization parameters
+    col1, col2 = st.columns(2)
+
+    with col1:
+        optimization_method = st.selectbox(
+            "Optimization Method",
+            ["Mean Variance", "Risk Parity", "Black-Litterman", "Minimum Variance"],
+        )
+        max_weight = st.slider("Maximum Weight per Asset", 0.1, 1.0, 0.4)
+
+    with col2:
+        target_volatility = st.slider("Target Volatility (%)", 5, 50, 15) / 100
+        rebalance_freq = st.selectbox(
+            "Rebalance Frequency", ["Daily", "Weekly", "Monthly", "Quarterly"]
+        )
+
+    # Optimize button
+    if st.button("⚖️ Optimize Portfolio", type="primary", use_container_width=True):
+        with st.spinner("Optimizing portfolio..."):
+            optimize_portfolio(
+                backtest_key,
+                optimization_method,
+                max_weight,
+                target_volatility,
+                rebalance_freq,
+            )
+
+    # Results section
+    st.markdown("---")
+    st.markdown("### ⚖️ Optimization Results")
+
+    if f"optimization_{backtest_key}" in st.session_state.risk_cache:
+        display_optimization_results(backtest_key)
+    else:
+        st.info("Configure parameters and click 'Optimize Portfolio' to see results")
+
+
+def stress_testing_workflow(backtest_key: str):
+    """Stress Testing Workflow"""
+
+    st.markdown("### 🔥 Stress Testing")
+    st.markdown("Evaluate portfolio performance under various stress scenarios.")
+
+    # Stress testing parameters
+    col1, col2 = st.columns(2)
+
+    with col1:
+        stress_type = st.selectbox(
+            "Stress Test Type",
+            ["Market Crash", "Interest Rate Shock", "Volatility Spike", "Monte Carlo"],
+        )
+        num_simulations = st.slider("Number of Simulations", 100, 10000, 1000)
+
+    with col2:
+        scenario_severity = st.selectbox(
+            "Scenario Severity", ["Mild", "Moderate", "Severe"]
+        )
+        time_horizon = st.slider("Time Horizon (days)", 1, 30, 5)
+
+    # Scenario parameters
+    scenario_params = {
+        "severity": scenario_severity.lower(),
+        "time_horizon": time_horizon,
+    }
+
+    # Run stress test button
+    if st.button("🔥 Run Stress Test", type="primary", use_container_width=True):
+        with st.spinner("Running stress test..."):
+            run_stress_test(backtest_key, stress_type, scenario_params, num_simulations)
+
+    # Results section
+    st.markdown("---")
+    st.markdown("### 🔥 Stress Test Results")
+
+    if f"stress_test_{backtest_key}" in st.session_state.risk_cache:
+        display_stress_test_results(backtest_key)
+    else:
+        st.info("Configure parameters and click 'Run Stress Test' to see results")
 
 
 def portfolio_risk_config(backtest_key: str):
@@ -952,60 +1079,9 @@ def display_stress_test_charts(analysis: dict):
 
 
 # ============================================================================
-# RISK ANALYSIS CALCULATION FUNCTIONS
+# LEGACY FUNCTIONS - TO BE REMOVED
 # ============================================================================
-
-
-def calculate_risk_metrics(
-    backtest_key: str,
-    confidence_level: float,
-    lookback_days: int,
-    var_method: str,
-    enable_decomposition: bool,
-):
-    """Calculate comprehensive risk metrics for selected backtest."""
-    try:
-        with st.spinner("🔄 Calculating risk metrics..."):
-            # Get backtest data
-            backtest_result = st.session_state.backtest_cache[backtest_key]
-
-            # Extract data using processor
-            processor = st.session_state.risk_processor
-            extracted_data = processor.extract_backtest_data(backtest_result)
-
-            returns = extracted_data["returns"]
-
-            if returns.empty:
-                st.error("❌ No return data available for risk analysis")
-                return
-
-            # Calculate risk metrics
-            risk_metrics = processor.calculate_risk_metrics(
-                returns=returns,
-                confidence_level=confidence_level,
-                var_method=var_method,
-            )
-
-            # Store results
-            cache_key = f"risk_metrics_{backtest_key}"
-            st.session_state.risk_cache[cache_key] = {
-                "metrics": risk_metrics,
-                "returns": returns,
-                "calculation_time": datetime.now(),
-                "parameters": {
-                    "confidence_level": confidence_level,
-                    "lookback_days": lookback_days,
-                    "var_method": var_method,
-                    "decomposition": enable_decomposition,
-                },
-            }
-
-            st.success(f"✅ Risk metrics calculated successfully!")
-
-    except Exception as e:
-        st.error(f"❌ Error calculating risk metrics: {e}")
-        if st.checkbox("Show detailed error", key="show_risk_error"):
-            st.error(traceback.format_exc())
+# These functions are duplicated and handled by the new workflow functions
 
 
 def calculate_position_sizes(backtest_key: str, position_method: str):
@@ -1527,6 +1603,296 @@ def display_stress_test_results():
                 "Parameters": stress_data["parameters"],
             }
         )
+
+
+# New workflow functions for Risk Management UI
+def calculate_risk_metrics(
+    backtest_key, confidence_level, lookback_days, var_method, enable_decomposition
+):
+    """Calculate risk metrics for the selected backtest"""
+    try:
+        processor = RiskManagementProcessor()
+        backtest_data = processor.extract_backtest_data(backtest_key)
+
+        if backtest_data is None:
+            st.error("No backtest data available for risk analysis.")
+            return
+
+        # Calculate risk metrics using the backend
+        from src.risk.risk_metrics import RiskMetrics
+
+        risk_calculator = RiskMetrics(
+            returns=backtest_data,
+            confidence_level=confidence_level,
+            lookback_days=lookback_days,
+        )
+
+        metrics = {
+            "var": risk_calculator.value_at_risk(method=var_method.lower()),
+            "cvar": risk_calculator.conditional_var(),
+            "max_drawdown": risk_calculator.max_drawdown(),
+            "sharpe_ratio": risk_calculator.sharpe_ratio(),
+            "sortino_ratio": risk_calculator.sortino_ratio(),
+            "volatility": risk_calculator.volatility(),
+            "skewness": risk_calculator.skewness(),
+            "kurtosis": risk_calculator.kurtosis(),
+        }
+
+        # Store results in cache
+        st.session_state.risk_cache[f"risk_metrics_{backtest_key}"] = metrics
+
+        st.success("Risk metrics calculated successfully!")
+
+    except Exception as e:
+        st.error(f"Error calculating risk metrics: {str(e)}")
+
+
+def optimize_portfolio(
+    backtest_key, optimization_method, max_weight, target_volatility, rebalance_freq
+):
+    """Optimize portfolio allocation"""
+    try:
+        processor = RiskManagementProcessor()
+        backtest_data = processor.extract_backtest_data(backtest_key)
+
+        if backtest_data is None:
+            st.error("No backtest data available for optimization.")
+            return
+
+        # Use portfolio optimization backend
+        from src.risk.portfolio_optimization import PortfolioOptimizer
+
+        optimizer = PortfolioOptimizer()
+
+        # Prepare data for optimization
+        expected_returns = backtest_data.mean() * 252  # Annualized
+        cov_matrix = (
+            backtest_data.cov() * 252
+            if isinstance(backtest_data, pd.DataFrame)
+            else pd.Series([backtest_data]).cov() * 252
+        )
+
+        if optimization_method == "Mean Variance":
+            if isinstance(cov_matrix, pd.DataFrame):
+                result = optimizer.mean_variance_optimization(
+                    expected_returns=expected_returns.values,
+                    covariance_matrix=cov_matrix.values,
+                    objective="sharpe",
+                )
+                weights = pd.Series(result["weights"], index=expected_returns.index)
+            else:
+                # Single asset case
+                weights = pd.Series([1.0], index=[0])
+                result = {
+                    "expected_return": expected_returns,
+                    "volatility": np.sqrt(cov_matrix),
+                }
+        elif optimization_method == "Risk Parity":
+            if isinstance(cov_matrix, pd.DataFrame):
+                result = optimizer.risk_parity_optimization(
+                    covariance_matrix=cov_matrix.values
+                )
+                weights = pd.Series(result["weights"], index=expected_returns.index)
+            else:
+                weights = pd.Series([1.0], index=[0])
+                result = {
+                    "expected_return": expected_returns,
+                    "volatility": np.sqrt(cov_matrix),
+                }
+        elif optimization_method == "Minimum Variance":
+            if isinstance(cov_matrix, pd.DataFrame):
+                result = optimizer.minimum_variance_optimization(
+                    covariance_matrix=cov_matrix.values
+                )
+                weights = pd.Series(result["weights"], index=expected_returns.index)
+            else:
+                weights = pd.Series([1.0], index=[0])
+                result = {
+                    "expected_return": expected_returns,
+                    "volatility": np.sqrt(cov_matrix),
+                }
+        else:
+            if isinstance(cov_matrix, pd.DataFrame):
+                result = optimizer.mean_variance_optimization(
+                    expected_returns=expected_returns.values,
+                    covariance_matrix=cov_matrix.values,
+                )
+                weights = pd.Series(result["weights"], index=expected_returns.index)
+            else:
+                weights = pd.Series([1.0], index=[0])
+                result = {
+                    "expected_return": expected_returns,
+                    "volatility": np.sqrt(cov_matrix),
+                }
+
+        # Calculate optimization results
+        if isinstance(expected_returns, pd.Series) and len(expected_returns) > 1:
+            portfolio_return = np.dot(weights.values, expected_returns.values)
+            portfolio_vol = np.sqrt(
+                np.dot(weights.values, np.dot(cov_matrix.values, weights.values))
+            )
+        else:
+            portfolio_return = (
+                expected_returns
+                if np.isscalar(expected_returns)
+                else expected_returns.iloc[0]
+            )
+            portfolio_vol = (
+                np.sqrt(cov_matrix)
+                if np.isscalar(cov_matrix)
+                else np.sqrt(cov_matrix.iloc[0, 0])
+            )
+
+        sharpe = (portfolio_return - 0.02) / portfolio_vol if portfolio_vol > 0 else 0.0
+
+        results = {
+            "weights": weights,
+            "method": optimization_method,
+            "expected_return": portfolio_return,
+            "portfolio_volatility": portfolio_vol,
+            "sharpe_ratio": sharpe,
+        }
+
+        # Store results in cache
+        st.session_state.risk_cache[f"optimization_{backtest_key}"] = results
+
+        st.success("Portfolio optimization completed successfully!")
+
+    except Exception as e:
+        st.error(f"Error optimizing portfolio: {str(e)}")
+
+
+def run_stress_test(backtest_key, stress_type, scenario_params, num_simulations):
+    """Run stress test on the portfolio"""
+    try:
+        processor = RiskManagementProcessor()
+        backtest_data = processor.extract_backtest_data(backtest_key)
+
+        if backtest_data is None:
+            st.error("No backtest data available for stress testing.")
+            return
+
+        # Use stress testing backend
+        from src.risk.stress_testing import StressTesting
+
+        stress_tester = StressTesting()
+
+        # Prepare data for stress testing
+        portfolio_weights = np.array([1.0])  # Single asset for now
+        returns_df = pd.DataFrame({"asset": backtest_data})
+
+        if stress_type == "Market Crash":
+            results = stress_tester.run_scenario_stress_test(
+                portfolio_weights=portfolio_weights, asset_returns=returns_df
+            )
+        elif stress_type == "Monte Carlo":
+            expected_returns = np.array([backtest_data.mean() * 252])
+            cov_matrix = np.array([[backtest_data.var() * 252]])
+            results = stress_tester.run_monte_carlo_stress_test(
+                portfolio_weights=portfolio_weights,
+                expected_returns=expected_returns,
+                covariance_matrix=cov_matrix,
+            )
+        else:
+            # Default to scenario stress test
+            results = stress_tester.run_scenario_stress_test(
+                portfolio_weights=portfolio_weights, asset_returns=returns_df
+            )
+
+        # Store results in cache
+        st.session_state.risk_cache[f"stress_test_{backtest_key}"] = {
+            "results": results,
+            "test_type": stress_type,
+            "parameters": scenario_params,
+        }
+
+        st.success("Stress test completed successfully!")
+
+    except Exception as e:
+        st.error(f"Error running stress test: {str(e)}")
+
+
+def display_risk_metrics_results(backtest_key):
+    """Display risk metrics results"""
+    if f"risk_metrics_{backtest_key}" not in st.session_state.risk_cache:
+        st.warning("No risk metrics calculated yet.")
+        return
+
+    metrics = st.session_state.risk_cache[f"risk_metrics_{backtest_key}"]
+
+    # Display key metrics in columns
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Value at Risk", f"{metrics['var']:.2%}")
+        st.metric("CVaR", f"{metrics['cvar']:.2%}")
+
+    with col2:
+        st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2%}")
+        st.metric("Volatility", f"{metrics['volatility']:.2%}")
+
+    with col3:
+        st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+        st.metric("Sortino Ratio", f"{metrics['sortino_ratio']:.2f}")
+
+    with col4:
+        st.metric("Skewness", f"{metrics['skewness']:.3f}")
+        st.metric("Kurtosis", f"{metrics['kurtosis']:.3f}")
+
+
+def display_optimization_results(backtest_key):
+    """Display portfolio optimization results"""
+    if f"optimization_{backtest_key}" not in st.session_state.risk_cache:
+        st.warning("No optimization results available.")
+        return
+
+    results = st.session_state.risk_cache[f"optimization_{backtest_key}"]
+
+    # Display key results
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Expected Return", f"{results['expected_return']:.2%}")
+
+    with col2:
+        st.metric("Portfolio Volatility", f"{results['portfolio_volatility']:.2%}")
+
+    with col3:
+        st.metric("Sharpe Ratio", f"{results['sharpe_ratio']:.2f}")
+
+    # Display weights if available
+    if "weights" in results and results["weights"] is not None:
+        st.subheader("Optimal Weights")
+        weights_df = pd.DataFrame(
+            {"Asset": results["weights"].index, "Weight": results["weights"].values}
+        )
+        st.dataframe(weights_df, use_container_width=True)
+
+
+def display_stress_test_results(backtest_key):
+    """Display stress test results"""
+    if f"stress_test_{backtest_key}" not in st.session_state.risk_cache:
+        st.warning("No stress test results available.")
+        return
+
+    stress_data = st.session_state.risk_cache[f"stress_test_{backtest_key}"]
+    results = stress_data["results"]
+
+    st.subheader(f"Stress Test: {stress_data['test_type']}")
+
+    # Display summary statistics
+    if isinstance(results, dict):
+        for key, value in results.items():
+            if isinstance(value, (int, float)):
+                st.metric(
+                    key.replace("_", " ").title(),
+                    f"{value:.2%}" if abs(value) < 1 else f"{value:.2f}",
+                )
+
+    # Display additional analysis if available
+    if "simulated_returns" in results:
+        st.subheader("Simulation Distribution")
+        st.line_chart(results["simulated_returns"])
 
 
 if __name__ == "__main__":

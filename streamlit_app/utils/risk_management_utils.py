@@ -49,37 +49,80 @@ class RiskManagementProcessor:
         self.risk_metrics = RiskMetrics()
         self.position_sizer = PositionSizer()
 
-    def extract_backtest_data(self, backtest_result: Dict) -> Dict[str, pd.DataFrame]:
-        """Extract necessary data from backtest results for risk analysis."""
+    def extract_backtest_data(self, backtest_key: str) -> pd.Series:
+        """Extract returns data from backtest cache for risk analysis."""
         try:
-            # Extract portfolio returns
-            if "portfolio_returns" in backtest_result:
-                returns = backtest_result["portfolio_returns"]
-            elif "equity_curve" in backtest_result:
-                equity_curve = backtest_result["equity_curve"]
-                returns = equity_curve.pct_change().dropna()
-            else:
-                # Generate from trades or positions if available
-                returns = self._calculate_returns_from_trades(backtest_result)
+            import streamlit as st
 
-            # Extract positions if available
-            positions = backtest_result.get("positions", pd.DataFrame())
+            if (
+                "backtest_cache" not in st.session_state
+                or backtest_key not in st.session_state.backtest_cache
+            ):
+                print(f"❌ No backtest data found for key: {backtest_key}")
+                return None
 
-            # Extract trades
-            trades = backtest_result.get("trades", pd.DataFrame())
+            backtest_result = st.session_state.backtest_cache[backtest_key]
+            print(
+                f"🔍 Extracting data from backtest result keys: {list(backtest_result.keys())}"
+            )
 
-            # Extract price data
-            price_data = backtest_result.get("price_data", pd.DataFrame())
+            # Extract portfolio returns - check for different formats
+            returns = None
 
-            return {
-                "returns": returns,
-                "positions": positions,
-                "trades": trades,
-                "price_data": price_data,
-            }
+            # Strategy 1: Check for direct returns
+            if "returns" in backtest_result:
+                returns = backtest_result["returns"]
+                if isinstance(returns, pd.Series) and len(returns) > 0:
+                    print(f"✅ Found returns data: {len(returns)} periods")
+                else:
+                    returns = None
+
+            # Strategy 2: Calculate from portfolio values
+            if returns is None and "portfolio_values" in backtest_result:
+                portfolio_values = backtest_result["portfolio_values"]
+                if isinstance(portfolio_values, list) and len(portfolio_values) > 1:
+                    portfolio_series = pd.Series(portfolio_values)
+                    returns = portfolio_series.pct_change().dropna()
+                    print(
+                        f"✅ Calculated returns from portfolio values: {len(returns)} periods"
+                    )
+                elif (
+                    isinstance(portfolio_values, pd.Series)
+                    and len(portfolio_values) > 1
+                ):
+                    returns = portfolio_values.pct_change().dropna()
+                    print(
+                        f"✅ Calculated returns from portfolio series: {len(returns)} periods"
+                    )
+
+            # Strategy 3: Legacy support for other formats
+            if returns is None:
+                if "portfolio_returns" in backtest_result:
+                    returns = backtest_result["portfolio_returns"]
+                elif "equity_curve" in backtest_result:
+                    equity_curve = backtest_result["equity_curve"]
+                    returns = equity_curve.pct_change().dropna()
+                else:
+                    # Generate from trades or positions if available
+                    returns = self._calculate_returns_from_trades(backtest_result)
+
+            # Ensure returns is a pandas Series
+            if returns is not None and not isinstance(returns, pd.Series):
+                returns = pd.Series(returns)
+
+            if returns is None or (isinstance(returns, pd.Series) and returns.empty):
+                print("❌ No valid return data found")
+                return None
+
+            print(f"✅ Successfully extracted returns: {len(returns)} periods")
+            return returns
 
         except Exception as e:
             self.logger.error(f"Error extracting backtest data: {e}")
+            print(f"❌ Error in extract_backtest_data: {e}")
+            import traceback
+
+            traceback.print_exc()
             return {
                 "returns": pd.Series(),
                 "positions": pd.DataFrame(),
