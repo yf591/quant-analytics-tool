@@ -255,6 +255,10 @@ class BacktestDataPreparer:
                         start="2023-01-01", periods=len(data), freq="D"
                     )
 
+        # Ensure timezone-naive index for backtest engine compatibility
+        if isinstance(data.index, pd.DatetimeIndex) and data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
+
         # Look for essential price columns
         essential_cols = ["Open", "High", "Low", "Close", "Volume"]
         available_cols = []

@@ -808,7 +808,7 @@ def run_comprehensive_backtest(
                 start_date = backtest_config.get("start_date")
                 end_date = backtest_config.get("end_date")
 
-                # Convert date objects to datetime if needed
+                # Convert date objects to datetime if needed and ensure timezone-naive
                 if start_date is not None:
                     import datetime as dt
 
@@ -826,6 +826,10 @@ def run_comprehensive_backtest(
                     else:
                         start_date = pd.Timestamp(start_date)
 
+                    # Ensure timezone-naive for compatibility with backtest engine
+                    if hasattr(start_date, "tz") and start_date.tz is not None:
+                        start_date = start_date.tz_localize(None)
+
                 if end_date is not None:
                     import datetime as dt
 
@@ -842,6 +846,10 @@ def run_comprehensive_backtest(
                         end_date = pd.to_datetime(end_date)
                     else:
                         end_date = pd.Timestamp(end_date)
+
+                    # Ensure timezone-naive for compatibility with backtest engine
+                    if hasattr(end_date, "tz") and end_date.tz is not None:
+                        end_date = end_date.tz_localize(None)
 
                 st.write(f"Debug: Running backtest from {start_date} to {end_date}")
 
