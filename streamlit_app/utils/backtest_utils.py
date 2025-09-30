@@ -53,23 +53,39 @@ class BacktestDataPreparer:
             Original price data from metadata if found, None otherwise
         """
         metadata_key = f"{feature_key}_metadata"
-        print(f"Looking for metadata key: {metadata_key}")
+        print(f"🔍 Looking for metadata key: {metadata_key}")
+
+        # Debug: Show all available feature cache keys
+        if hasattr(session_state, "feature_cache") and session_state.feature_cache:
+            available_keys = list(session_state.feature_cache.keys())
+            print(f"📋 Available feature cache keys: {available_keys}")
+
+            # Look for keys that contain the feature_key
+            matching_keys = [
+                k
+                for k in available_keys
+                if feature_key in k and "metadata" in k.lower()
+            ]
+            print(f"🎯 Matching metadata keys: {matching_keys}")
+        else:
+            print("❌ No feature_cache found or it's empty")
+            return None
 
         if (
             hasattr(session_state, "feature_cache")
             and metadata_key in session_state.feature_cache
         ):
             metadata = session_state.feature_cache[metadata_key]
-            print(f"Found metadata with type: {type(metadata)}")
+            print(f"✅ Found metadata with type: {type(metadata)}")
 
             if isinstance(metadata, dict):
-                print(f"Metadata keys: {list(metadata.keys())}")
+                print(f"📊 Metadata keys: {list(metadata.keys())}")
 
                 if "original_data" in metadata:
                     original_data = metadata["original_data"]
                     if isinstance(original_data, pd.DataFrame):
                         print(
-                            f"Found original_data in metadata '{metadata_key}': {original_data.shape}"
+                            f"🎉 Found original_data in metadata '{metadata_key}': {original_data.shape}"
                         )
                         print(f"Original data columns: {list(original_data.columns)}")
                         return original_data
@@ -82,11 +98,148 @@ class BacktestDataPreparer:
             else:
                 print("Metadata is not a dictionary")
         else:
-            print(f"Metadata key '{metadata_key}' not found in feature cache")
+            print(f"❌ Metadata key '{metadata_key}' not found in feature cache")
             if hasattr(session_state, "feature_cache"):
                 available_keys = list(session_state.feature_cache.keys())
-                print(f"Available feature cache keys: {available_keys}")
+                print(f"📋 Available feature cache keys: {available_keys}")
 
+                # Show all metadata keys
+                metadata_keys = [k for k in available_keys if "metadata" in k.lower()]
+                print(f"🔍 All metadata keys found: {metadata_keys}")
+
+                # Try to find similar keys (case-insensitive search)
+                feature_base = feature_key.lower()
+                similar_keys = []
+                for key in available_keys:
+                    if (
+                        key.lower().startswith(feature_base)
+                        or feature_base in key.lower()
+                    ):
+                        similar_keys.append(key)
+
+                if similar_keys:
+                    print(f"🎯 Found similar keys: {similar_keys}")
+                    # Try to use the most similar metadata key
+                    for similar_key in similar_keys:
+                        if similar_key.endswith("_metadata"):
+                            metadata = session_state.feature_cache[similar_key]
+                            print(f"🔍 Trying similar metadata key: {similar_key}")
+                            print(f"📊 Metadata type: {type(metadata)}")
+                            if isinstance(metadata, dict):
+                                print(f"📋 Metadata keys: {list(metadata.keys())}")
+                                if "original_data" in metadata:
+                                    original_data = metadata["original_data"]
+                                    if isinstance(original_data, pd.DataFrame):
+                                        print(
+                                            f"🎉 Found original_data in similar key '{similar_key}': {original_data.shape}"
+                                        )
+                                        print(
+                                            f"📊 Original data columns: {list(original_data.columns)}"
+                                        )
+                                        return original_data
+                                    else:
+                                        print(
+                                            f"❌ original_data is not DataFrame: {type(original_data)}"
+                                        )
+                                else:
+                                    print("❌ No 'original_data' key in metadata")
+                            else:
+                                print(f"❌ Metadata is not dict: {type(metadata)}")
+                else:
+                    print("❌ No similar keys found")
+
+        return None
+
+    def find_best_metadata_match(
+        self, feature_key: str, session_state
+    ) -> Optional[pd.DataFrame]:
+        """
+        Find the best metadata match for a feature key using multiple strategies
+
+        Args:
+            feature_key: Key of the feature cache entry
+            session_state: Streamlit session state
+
+        Returns:
+            Original price data if found, None otherwise
+        """
+        if not hasattr(session_state, "feature_cache"):
+            print("❌ No feature_cache in session_state")
+            return None
+
+        available_keys = list(session_state.feature_cache.keys())
+        metadata_keys = [k for k in available_keys if "metadata" in k.lower()]
+
+        print(f"🔍 Searching for metadata for feature key: '{feature_key}'")
+        print(f"📋 Available metadata keys: {metadata_keys}")
+
+        # Strategy 1: Extract ticker and look for ticker_technical_metadata
+        ticker_match = None
+        if "_" in feature_key:
+            parts = feature_key.split("_")
+            ticker = parts[0]  # First part should be ticker (e.g., "AAPL")
+
+            # Look for patterns like "AAPL_technical_metadata"
+            for metadata_key in metadata_keys:
+                if (
+                    metadata_key.startswith(f"{ticker}_")
+                    and "technical" in metadata_key
+                ):
+                    print(f"🎯 Strategy 1 - Found ticker match: {metadata_key}")
+                    original_data = self._extract_original_data(
+                        metadata_key, session_state
+                    )
+                    if original_data is not None:
+                        return original_data
+
+        # Strategy 2: Look for exact feature_key + _metadata
+        exact_metadata_key = f"{feature_key}_metadata"
+        if exact_metadata_key in metadata_keys:
+            print(f"🎯 Strategy 2 - Found exact match: {exact_metadata_key}")
+            original_data = self._extract_original_data(
+                exact_metadata_key, session_state
+            )
+            if original_data is not None:
+                return original_data
+
+        # Strategy 3: Fuzzy matching - look for any metadata containing the ticker
+        if "_" in feature_key:
+            ticker = feature_key.split("_")[0]
+            for metadata_key in metadata_keys:
+                if ticker.upper() in metadata_key.upper():
+                    print(f"🎯 Strategy 3 - Found fuzzy match: {metadata_key}")
+                    original_data = self._extract_original_data(
+                        metadata_key, session_state
+                    )
+                    if original_data is not None:
+                        return original_data
+
+        print("❌ No metadata match found with any strategy")
+        return None
+
+    def _extract_original_data(
+        self, metadata_key: str, session_state
+    ) -> Optional[pd.DataFrame]:
+        """Extract original_data from a metadata entry"""
+        try:
+            metadata = session_state.feature_cache[metadata_key]
+            if isinstance(metadata, dict) and "original_data" in metadata:
+                original_data = metadata["original_data"]
+                if isinstance(original_data, pd.DataFrame):
+                    print(
+                        f"✅ Extracted original_data from '{metadata_key}': {original_data.shape}"
+                    )
+                    return original_data
+                else:
+                    print(
+                        f"❌ original_data is not DataFrame in '{metadata_key}': {type(original_data)}"
+                    )
+            else:
+                print(
+                    f"❌ Invalid metadata structure in '{metadata_key}': {type(metadata)}"
+                )
+        except Exception as e:
+            print(f"❌ Error extracting from '{metadata_key}': {e}")
         return None
 
     def prepare_feature_data(
@@ -108,28 +261,62 @@ class BacktestDataPreparer:
         if isinstance(feature_data, pd.DataFrame):
             print(f"Direct DataFrame with columns: {list(feature_data.columns)}")
 
-            # Check if DataFrame contains price data
+            # Check if DataFrame contains actual OHLCV price data (not just technical indicators)
             columns_lower = [col.lower() for col in feature_data.columns]
-            price_indicators = [
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "price",
-                "adj",
+
+            print(f"🔍 Analyzing columns for OHLCV data: {list(feature_data.columns)}")
+
+            # Look for exact OHLCV column matches (case insensitive)
+            exact_ohlcv_matches = []
+            for col in feature_data.columns:
+                col_clean = col.lower().strip()
+                if col_clean in [
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "adj_close",
+                    "adjusted_close",
+                ]:
+                    exact_ohlcv_matches.append(col)
+
+            print(f"📊 Exact OHLCV matches found: {exact_ohlcv_matches}")
+
+            # Check for technical indicator patterns to avoid false positives
+            technical_patterns = [
+                "sma",
+                "ema",
+                "rsi",
+                "macd",
+                "bb_",
+                "atr",
+                "stoch",
+                "bollinger",
+                "moving_average",
+                "momentum",
+                "signal",
             ]
-            has_price_data = any(
-                any(indicator in col for indicator in price_indicators)
-                for col in columns_lower
+
+            is_technical_indicators = all(
+                any(pattern in col.lower() for pattern in technical_patterns)
+                for col in feature_data.columns
             )
 
-            if has_price_data:
-                print("DataFrame appears to contain price data")
+            print(f"🔧 Contains only technical indicators: {is_technical_indicators}")
+
+            # Determine if this is actual price data or technical indicators
+            if (
+                len(exact_ohlcv_matches) >= 2 and not is_technical_indicators
+            ):  # Need at least 2 OHLCV columns
+                print("✅ DataFrame contains actual OHLCV price data")
                 return self._validate_price_data(feature_data)
             else:
-                print("DataFrame contains technical indicators but no price data")
-                print("Will check metadata for original price data")
+                print(
+                    "🔧 DataFrame contains technical indicators but no actual OHLCV price data"
+                )
+                print(f"📊 Technical indicators found: {list(feature_data.columns)}")
+                print("📋 Will check metadata for original price data")
                 # Return None to signal that metadata should be checked
                 return None
 
@@ -340,6 +527,10 @@ class BacktestDataPreparer:
                 available_cols.append("Close")
             else:
                 # If no price data at all, we can't proceed
+                print(f"❌ Available columns: {list(data.columns)}")
+                print(
+                    f"❌ No OHLCV price data found. This appears to be technical indicators data."
+                )
                 raise ValueError("No price data found in the dataset")
 
         # Ensure Close is numeric

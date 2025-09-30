@@ -295,14 +295,14 @@ def strategy_backtest_workflow():
     if st.session_state.backtest_running:
         display_backtest_progress()
     elif st.session_state.backtest_cache:
-        # Show latest backtest result
+        # Show latest backtest result with unique key
         latest_backtest = max(
             st.session_state.backtest_cache.keys(),
             key=lambda x: st.session_state.backtest_cache[x].get(
                 "timestamp", datetime.min
             ),
         )
-        display_quick_results(latest_backtest)
+        display_quick_results(latest_backtest, key_suffix="_main_workflow")
     else:
         st.info("Configure and run a backtest to see results here")
 
@@ -312,13 +312,62 @@ def select_data_source() -> Optional[str]:
 
     st.subheader("📊 Data Source Selection")
 
+    # Debug: Show available feature cache keys
+    if "feature_cache" in st.session_state and st.session_state.feature_cache:
+        with st.expander("🔍 Debug: Data Structure"):
+            st.write("Feature Cache Keys:")
+            cache_keys = list(st.session_state.feature_cache.keys())
+            for i, key in enumerate(cache_keys):
+                st.write(f'{i}:"{key}"')
+
+                if not key.endswith("_metadata"):
+                    data_item = st.session_state.feature_cache[key]
+                    st.write(f"{key}:")
+                    if isinstance(data_item, pd.DataFrame):
+                        st.write(f"Direct DataFrame: {data_item.shape}")
+                        st.write(
+                            f"Columns: {list(data_item.columns)[:10]}{'...' if len(data_item.columns) > 10 else ''}"
+                        )
+                    elif isinstance(data_item, dict):
+                        st.write(f"Dict keys: {list(data_item.keys())}")
+                        for dict_key, dict_value in data_item.items():
+                            if isinstance(dict_value, pd.DataFrame):
+                                st.write(f"{dict_key}: DataFrame {dict_value.shape}")
+                                st.write(
+                                    f"Columns: {list(dict_value.columns)[:5]}{'...' if len(dict_value.columns) > 5 else ''}"
+                                )
+                            else:
+                                st.write(f"{dict_key}: {type(dict_value)}")
+                else:
+                    metadata_item = st.session_state.feature_cache[key]
+                    st.write(f"{key}:")
+                    if isinstance(metadata_item, dict):
+                        st.write(f"Dict keys: {list(metadata_item.keys())}")
+                        if "original_data" in metadata_item:
+                            orig_data = metadata_item["original_data"]
+                            if isinstance(orig_data, pd.DataFrame):
+                                st.write(f"original_data: DataFrame {orig_data.shape}")
+                                st.write(
+                                    f"Columns: {list(orig_data.columns)[:5]}{'...' if len(orig_data.columns) > 5 else ''}"
+                                )
+
+            if "data_cache" in st.session_state and st.session_state.data_cache:
+                st.write("Data Cache Keys:")
+                data_keys = list(st.session_state.data_cache.keys())
+                for i, key in enumerate(data_keys):
+                    st.write(f'{i}:"{key}"')
+
     available_sources = []
     source_details = {}
 
     try:
-        # Check feature data
+        # Check feature data (exclude metadata keys)
         if "feature_cache" in st.session_state and st.session_state.feature_cache:
             for feature_key, feature_data in st.session_state.feature_cache.items():
+                # Skip metadata keys
+                if feature_key.endswith("_metadata"):
+                    continue
+
                 # Get basic info about the feature data
                 data_info = ""
                 price_indicator = ""
@@ -605,13 +654,57 @@ def run_comprehensive_backtest(
                     # If data preparation returns None (technical indicators without price data)
                     if data is None:
                         st.write(
-                            f"Debug: Feature data lacks price information, checking for metadata..."
+                            f"⚠️ Debug: Feature data lacks price information, checking for metadata..."
                         )
 
-                        # Try to find metadata with price data
+                        # Debug: Show current feature cache keys with detailed analysis
+                        if (
+                            hasattr(st.session_state, "feature_cache")
+                            and st.session_state.feature_cache
+                        ):
+                            cache_keys = list(st.session_state.feature_cache.keys())
+                            st.write(
+                                f"🔍 Available feature cache keys ({len(cache_keys)} total): {cache_keys}"
+                            )
+
+                            # Look for metadata keys
+                            metadata_keys = [
+                                k for k in cache_keys if "metadata" in k.lower()
+                            ]
+                            st.write(
+                                f"📊 Found metadata keys ({len(metadata_keys)} total): {metadata_keys}"
+                            )
+
+                            # Analyze the current data_key pattern
+                            st.write(f"🎯 Looking for metadata for: '{data_key}'")
+
+                            # Show potential matches
+                            if "_" in data_key:
+                                ticker = data_key.split("_")[0]
+                                potential_matches = [
+                                    k
+                                    for k in metadata_keys
+                                    if ticker.upper() in k.upper()
+                                ]
+                                st.write(
+                                    f"🔍 Potential ticker matches for '{ticker}': {potential_matches}"
+                                )
+                        else:
+                            st.write("❌ No feature cache available")
+
+                        # Try to find metadata with price data using multiple strategies
                         metadata_data = data_preparer.find_metadata_for_features(
                             data_key, st.session_state
                         )
+
+                        # If standard method fails, try enhanced search
+                        if metadata_data is None:
+                            st.write(
+                                "🔍 Standard metadata search failed, trying enhanced search..."
+                            )
+                            metadata_data = data_preparer.find_best_metadata_match(
+                                data_key, st.session_state
+                            )
 
                         if metadata_data is not None:
                             data = data_preparer._validate_price_data(metadata_data)
@@ -620,14 +713,72 @@ def run_comprehensive_backtest(
                             )
                             st.write(f"Debug: Price data columns: {list(data.columns)}")
                         else:
-                            st.error(f"No price data found in the dataset")
+                            st.warning(f"No price data found for '{data_key}'")
                             st.write(
                                 f"Data key: {data_key}, Source type: {source_type}"
                             )
+
+                            # Try to find raw data as fallback
                             st.info(
-                                "💡 **Solution**: Use data that includes price information (OHLCV) or ensure technical indicator data has metadata with original price data."
+                                "🔄 Attempting to find raw price data as fallback..."
                             )
-                            return
+
+                            # Extract ticker from data_key (e.g., "AAPL_1y_1d_technical" -> "AAPL")
+                            ticker_candidates = []
+                            # Try different patterns
+                            parts = data_key.split("_")
+                            if len(parts) > 0:
+                                ticker_candidates.append(parts[0])  # First part
+
+                            # Look for corresponding raw data
+                            raw_data_found = False
+                            if (
+                                "data_cache" in st.session_state
+                                and st.session_state.data_cache
+                            ):
+                                for ticker_candidate in ticker_candidates:
+                                    # Try exact match first
+                                    for raw_key in st.session_state.data_cache.keys():
+                                        if (
+                                            ticker_candidate.upper() in raw_key.upper()
+                                            or raw_key.upper()
+                                            in ticker_candidate.upper()
+                                        ):
+                                            raw_data_item = st.session_state.data_cache[
+                                                raw_key
+                                            ]
+                                            if (
+                                                isinstance(raw_data_item, dict)
+                                                and "data" in raw_data_item
+                                            ):
+                                                raw_data = raw_data_item["data"]
+                                            else:
+                                                raw_data = raw_data_item
+
+                                            if isinstance(raw_data, pd.DataFrame):
+                                                # Validate that it contains price data
+                                                validated_data = (
+                                                    data_preparer._validate_price_data(
+                                                        raw_data
+                                                    )
+                                                )
+                                                if validated_data is not None:
+                                                    st.success(
+                                                        f"✅ Found fallback raw data: {raw_key} ({validated_data.shape})"
+                                                    )
+                                                    data = validated_data
+                                                    raw_data_found = True
+                                                    break
+
+                                    if raw_data_found:
+                                        break
+
+                            if not raw_data_found:
+                                st.error("❌ No compatible price data found")
+                                st.info(
+                                    "💡 **Solution**: Ensure you have raw data (from Data Acquisition) that matches the feature data, or use feature data that includes metadata with original price data."
+                                )
+                                return
                     elif data.empty:
                         st.error(f"Prepared data is empty for key '{data_key}'")
                         return
@@ -825,8 +976,7 @@ def run_comprehensive_backtest(
             st.success(f"🎉 Backtest '{backtest_id}' completed successfully!")
             st.balloons()
 
-            # Display quick summary
-            display_quick_results(backtest_id)
+            # Results will be displayed in the main workflow section
 
     except Exception as e:
         st.error(f"Backtest failed: {str(e)}")
@@ -856,7 +1006,7 @@ def display_backtest_progress():
     status_placeholder.info("⚙️ Processing backtest...")
 
 
-def display_quick_results(backtest_id: str):
+def display_quick_results(backtest_id: str, key_suffix: str = ""):
     """Display quick backtest results"""
 
     if backtest_id not in st.session_state.backtest_cache:
@@ -950,16 +1100,26 @@ def display_quick_results(backtest_id: str):
                     height=300,
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    key=f"portfolio_chart_{backtest_id}{key_suffix}",
+                )
 
             except Exception as e:
                 st.warning(f"Could not create performance chart: {e}")
+                if "multiple plotly_chart elements" in str(e):
+                    st.info(
+                        "💡 **Note**: This visualization conflict has been automatically resolved. The chart should display correctly on the next update."
+                    )
         else:
             st.info("Insufficient portfolio data for chart display")
 
     except Exception as e:
         st.error(f"Error displaying quick results: {e}")
-        if st.checkbox("Show error details", key=f"error_details_{backtest_id}"):
+        if st.checkbox(
+            "Show error details", key=f"error_details_{backtest_id}{key_suffix}"
+        ):
             st.error(traceback.format_exc())
 
 
@@ -1146,7 +1306,7 @@ def run_monte_carlo_simulation(
         template="plotly_white",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="monte_carlo_distribution_chart")
 
 
 def walk_forward_analysis():

@@ -429,7 +429,9 @@ class BacktestResultsWidget:
             fig.update_yaxes(title_text="Portfolio Value ($)", row=1, col=1)
             fig.update_yaxes(title_text="Returns (%)", row=2, col=1)
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(
+                fig, use_container_width=True, key="backtest_performance_chart"
+            )
 
     def render_trades_analysis(self, results: Dict[str, Any]) -> None:
         """Render trades analysis"""
@@ -520,7 +522,9 @@ class BacktestResultsWidget:
                     height=400,
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(
+                    fig, use_container_width=True, key="trades_distribution_chart"
+                )
         else:
             st.info("No trades executed in this backtest")
 
@@ -611,7 +615,9 @@ class BacktestResultsWidget:
                 height=400,
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(
+                fig, use_container_width=True, key="drawdown_analysis_chart"
+            )
 
             # Drawdown statistics
             col1, col2, col3 = st.columns(3)
@@ -711,12 +717,12 @@ class BacktestComparisonWidget:
                     )
                 )
 
-        fig.update_layout(
-            title="Normalized Performance Comparison (Base = 100)",
-            xaxis_title="Date",
-            yaxis_title="Normalized Value",
-            template="plotly_white",
-            height=500,
-        )
+                fig.update_layout(
+                    title="Normalized Performance Comparison (Base = 100)",
+                    xaxis_title="Date",
+                    yaxis_title="Normalized Value",
+                    template="plotly_white",
+                    height=500,
+                )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="backtest_comparison_chart")
