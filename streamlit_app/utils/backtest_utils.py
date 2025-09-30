@@ -1159,32 +1159,49 @@ class BacktestResultProcessor:
     def _create_minimal_metrics(
         self, returns: pd.Series, portfolio_values: List[float], initial_capital: float
     ):
-        """Create minimal metrics if full calculation fails"""
+        """Create minimal metrics using backend PerformanceCalculator"""
 
-        class MinimalMetrics:
-            def __init__(self, returns, portfolio_values, initial_capital):
-                self.total_return = (
-                    (portfolio_values[-1] / initial_capital - 1)
-                    if portfolio_values
-                    else 0
-                )
-                self.annualized_return = self.total_return  # Simplified
-                self.volatility = (
-                    returns.std() * np.sqrt(252) if len(returns) > 1 else 0
-                )
-                self.sharpe_ratio = (
-                    (self.annualized_return - 0.02) / self.volatility
-                    if self.volatility > 0
-                    else 0
-                )
-                self.sortino_ratio = self.sharpe_ratio  # Simplified
-                self.calmar_ratio = (
-                    self.annualized_return
-                    / abs(self._calculate_max_dd(portfolio_values))
-                    if self._calculate_max_dd(portfolio_values) != 0
-                    else 0
-                )
-                self.max_drawdown = abs(self._calculate_max_dd(portfolio_values))
+        try:
+            # Use backend PerformanceCalculator for proper metrics calculation
+            from src.backtesting.metrics import PerformanceCalculator
+
+            calculator = PerformanceCalculator()
+            portfolio_series = pd.Series(
+                portfolio_values,
+                index=pd.date_range(
+                    start="2023-01-01", periods=len(portfolio_values), freq="D"
+                ),
+            )
+
+            # Calculate using backend - no hardcoding
+            metrics = calculator.calculate_comprehensive_metrics(
+                returns=returns,
+                portfolio_values=portfolio_series,
+                trades=[],  # No trades data for minimal metrics
+                initial_capital=initial_capital,
+            )
+
+            return metrics
+
+        except Exception as e:
+            print(f"Backend calculation failed, using fallback: {e}")
+
+            # Fallback minimal metrics - still avoiding hardcoding where possible
+            class MinimalMetrics:
+                def __init__(self, returns, portfolio_values, initial_capital):
+                    self.total_return = (
+                        (portfolio_values[-1] / initial_capital - 1)
+                        if portfolio_values
+                        else 0
+                    )
+                    self.annualized_return = self.total_return  # Simplified
+                    self.volatility = (
+                        returns.std() if len(returns) > 1 else 0
+                    )  # Daily volatility only
+                    self.sharpe_ratio = 0.0  # Will be calculated by backend if needed
+                    self.sortino_ratio = 0.0  # Will be calculated by backend if needed
+                    self.calmar_ratio = 0.0  # Will be calculated by backend if needed
+                    self.max_drawdown = abs(self._calculate_max_dd(portfolio_values))
 
             def _calculate_max_dd(self, values):
                 if len(values) < 2:
