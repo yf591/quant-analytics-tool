@@ -9,7 +9,7 @@
 
 This tool implements methodologies from "Advances in Financial Machine Learning" to provide integrated financial data analysis, strategy development, and backtesting capabilities using machine learning.
 
-![toppage](_images/qat_toppage.jpeg)
+![toppage](_images/qat_toppage_short.jpeg)
 
 ## Key Features
 
