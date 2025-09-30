@@ -11,6 +11,8 @@ from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
 from datetime import datetime
+import time
+import traceback
 
 # Add src directory to path
 project_root = Path(__file__).parent.parent.parent
@@ -23,10 +25,25 @@ try:
         AFMLPortfolioOptimizer,
     )
     from src.risk.risk_metrics import RiskMetrics, PortfolioRiskAnalyzer
+    from src.risk.position_sizing import PositionSizer, PortfolioSizer
+    from src.risk.stress_testing import (
+        ScenarioGenerator,
+        MonteCarloEngine,
+        SensitivityAnalyzer,
+        TailRiskAnalyzer,
+        StressTesting,
+    )
     from src.backtesting.portfolio import Portfolio, RiskModel
     from src.config import settings
+
+    # Risk Management UI Utilities
+    from streamlit_app.utils.risk_management_utils import (
+        RiskManagementProcessor,
+        RiskVisualizationManager,
+    )
 except ImportError as e:
     st.error(f"Import error: {e}")
+    st.error("Please ensure all risk management modules are properly installed.")
     st.stop()
 
 
@@ -36,14 +53,36 @@ def main():
     st.title("🛡️ Risk Management")
     st.markdown("**Professional Portfolio Risk Management Platform**")
 
+    # Display feature icons for better UX
+    st.markdown(
+        """
+    **Available Risk Management Tools:**
+    🎯 **Position Sizing** | 📊 **Risk Metrics** | ⚖️ **Portfolio Optimization** | 🔥 **Stress Testing** | 📈 **Real-time Monitoring**
+    """
+    )
+
     # Initialize session state
     if "risk_cache" not in st.session_state:
         st.session_state.risk_cache = {}
+    if "risk_processor" not in st.session_state:
+        st.session_state.risk_processor = RiskManagementProcessor()
 
     # Check for available backtests
     if "backtest_cache" not in st.session_state or not st.session_state.backtest_cache:
         st.warning("⚡ Please run backtests first from Backtesting page")
+        st.info(
+            """
+        **To get started with Risk Management:**
+        1. Go to the **Backtesting** page
+        2. Run at least one backtest
+        3. Return here to analyze portfolio risk
+        """
+        )
         return
+
+    # Show available backtests info
+    num_backtests = len(st.session_state.backtest_cache)
+    st.success(f"✅ {num_backtests} backtest(s) available for risk analysis")
 
     # Professional UI Layout
     col1, col2 = st.columns([1, 2])
@@ -109,6 +148,20 @@ def portfolio_risk_config(backtest_key: str):
             enable_decomposition,
         )
 
+    # Display current risk status
+    if f"risk_metrics_{backtest_key}" in st.session_state.risk_cache:
+        metrics = st.session_state.risk_cache[f"risk_metrics_{backtest_key}"]
+        st.success(f"✅ Risk analysis completed")
+
+        # Quick metrics display
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.metric("VaR (95%)", f"{abs(metrics.get('var', 0)):.2%}", delta=None)
+        with col_b:
+            st.metric(
+                "Max Drawdown", f"{abs(metrics.get('max_drawdown', 0)):.2%}", delta=None
+            )
+
 
 def portfolio_optimization_config(backtest_key: str):
     """Portfolio Optimization Configuration"""
@@ -151,6 +204,29 @@ def portfolio_optimization_config(backtest_key: str):
             target_volatility,
             rebalance_freq,
         )
+
+    # Position Sizing Configuration
+    st.markdown("**Position Sizing**")
+
+    position_method = st.selectbox(
+        "Position Sizing Method",
+        ["Kelly Criterion", "Risk Parity", "Volatility Targeting", "Fixed Fractional"],
+        key="pos_method",
+    )
+
+    # Method-specific parameters
+    if position_method == "Kelly Criterion":
+        st.slider("Kelly Fraction Limit", 0.1, 1.0, 0.25, key="kelly_limit")
+    elif position_method == "Volatility Targeting":
+        st.slider("Target Volatility (%)", 5.0, 30.0, 15.0, key="vol_target")
+    elif position_method == "Fixed Fractional":
+        st.slider("Risk per Trade (%)", 0.5, 5.0, 2.0, key="risk_per_trade")
+
+    # Calculate position sizes button
+    if st.button(
+        "🎯 Calculate Position Sizes", type="secondary", use_container_width=True
+    ):
+        calculate_position_sizes(backtest_key, position_method)
 
 
 def stress_testing_config(backtest_key: str):
@@ -198,6 +274,49 @@ def stress_testing_config(backtest_key: str):
 
 def risk_display_panel():
     """Risk Display and Analysis Panel"""
+
+    st.subheader("📊 Risk Analysis Results")
+
+    # Check if any risk analysis has been performed
+    risk_results = [
+        k for k in st.session_state.risk_cache.keys() if k.startswith("risk_metrics_")
+    ]
+
+    if not risk_results:
+        st.info(
+            """
+        👈 **Select a backtest and choose analysis type from the left panel**
+        
+        **Available Risk Analysis:**
+        - **Risk Metrics**: VaR, CVaR, Sharpe Ratio, Maximum Drawdown
+        - **Portfolio Optimization**: Mean Variance, Risk Parity, Black-Litterman
+        - **Position Sizing**: Kelly Criterion, Volatility Targeting
+        - **Stress Testing**: Market scenarios, Monte Carlo simulations
+        """
+        )
+        return
+
+    # Display tabs for different analysis types
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "📈 Risk Metrics",
+            "⚖️ Portfolio Optimization",
+            "🎯 Position Sizing",
+            "🔥 Stress Testing",
+        ]
+    )
+
+    with tab1:
+        display_risk_metrics()
+
+    with tab2:
+        display_optimization_results()
+
+    with tab3:
+        display_position_sizing_results()
+
+    with tab4:
+        display_stress_test_results()
 
     if not st.session_state.risk_cache:
         st.info("🛡️ Configure and run risk analysis to see results")
@@ -830,6 +949,584 @@ def display_stress_test_charts(analysis: dict):
     fig.update_layout(title=f"{stress_type} Stress Test Results", height=400)
 
     st.plotly_chart(fig, use_container_width=True)
+
+
+# ============================================================================
+# RISK ANALYSIS CALCULATION FUNCTIONS
+# ============================================================================
+
+
+def calculate_risk_metrics(
+    backtest_key: str,
+    confidence_level: float,
+    lookback_days: int,
+    var_method: str,
+    enable_decomposition: bool,
+):
+    """Calculate comprehensive risk metrics for selected backtest."""
+    try:
+        with st.spinner("🔄 Calculating risk metrics..."):
+            # Get backtest data
+            backtest_result = st.session_state.backtest_cache[backtest_key]
+
+            # Extract data using processor
+            processor = st.session_state.risk_processor
+            extracted_data = processor.extract_backtest_data(backtest_result)
+
+            returns = extracted_data["returns"]
+
+            if returns.empty:
+                st.error("❌ No return data available for risk analysis")
+                return
+
+            # Calculate risk metrics
+            risk_metrics = processor.calculate_risk_metrics(
+                returns=returns,
+                confidence_level=confidence_level,
+                var_method=var_method,
+            )
+
+            # Store results
+            cache_key = f"risk_metrics_{backtest_key}"
+            st.session_state.risk_cache[cache_key] = {
+                "metrics": risk_metrics,
+                "returns": returns,
+                "calculation_time": datetime.now(),
+                "parameters": {
+                    "confidence_level": confidence_level,
+                    "lookback_days": lookback_days,
+                    "var_method": var_method,
+                    "decomposition": enable_decomposition,
+                },
+            }
+
+            st.success(f"✅ Risk metrics calculated successfully!")
+
+    except Exception as e:
+        st.error(f"❌ Error calculating risk metrics: {e}")
+        if st.checkbox("Show detailed error", key="show_risk_error"):
+            st.error(traceback.format_exc())
+
+
+def calculate_position_sizes(backtest_key: str, position_method: str):
+    """Calculate optimal position sizes using selected method."""
+    try:
+        with st.spinner("🔄 Calculating optimal position sizes..."):
+            # Get backtest data
+            backtest_result = st.session_state.backtest_cache[backtest_key]
+
+            # Extract data
+            processor = st.session_state.risk_processor
+            extracted_data = processor.extract_backtest_data(backtest_result)
+            returns = extracted_data["returns"]
+
+            if returns.empty:
+                st.error("❌ No return data available for position sizing")
+                return
+
+            # Get method-specific parameters
+            kwargs = {}
+            if position_method == "Kelly Criterion":
+                kwargs["kelly_limit"] = st.session_state.get("kelly_limit", 0.25)
+            elif position_method == "Volatility Targeting":
+                kwargs["target_volatility"] = (
+                    st.session_state.get("vol_target", 15.0) / 100
+                )
+            elif position_method == "Fixed Fractional":
+                kwargs["risk_per_trade"] = (
+                    st.session_state.get("risk_per_trade", 2.0) / 100
+                )
+
+            # Calculate position sizes
+            sizing_result = processor.calculate_position_sizes(
+                returns=returns, method=position_method, **kwargs
+            )
+
+            # Store results
+            cache_key = f"position_sizing_{backtest_key}"
+            st.session_state.risk_cache[cache_key] = {
+                "sizing_result": sizing_result,
+                "returns": returns,
+                "calculation_time": datetime.now(),
+                "method": position_method,
+                "parameters": kwargs,
+            }
+
+            st.success(f"✅ Position sizing calculated using {position_method}!")
+
+    except Exception as e:
+        st.error(f"❌ Error calculating position sizes: {e}")
+        if st.checkbox("Show position sizing error", key="show_pos_error"):
+            st.error(traceback.format_exc())
+
+
+def optimize_portfolio(
+    backtest_key: str,
+    optimization_method: str,
+    max_weight: float,
+    target_volatility: float,
+    rebalance_freq: str,
+):
+    """Run portfolio optimization using selected method."""
+    try:
+        with st.spinner("🔄 Optimizing portfolio..."):
+            # Get backtest data
+            backtest_result = st.session_state.backtest_cache[backtest_key]
+
+            # Extract data
+            processor = st.session_state.risk_processor
+            extracted_data = processor.extract_backtest_data(backtest_result)
+            returns = extracted_data["returns"]
+
+            if returns.empty:
+                st.error("❌ No return data available for optimization")
+                return
+
+            # Convert single asset returns to DataFrame format for optimizer
+            returns_df = pd.DataFrame({"Asset": returns})
+
+            # Set optimization parameters
+            kwargs = {
+                "max_weight": max_weight,
+                "target_volatility": target_volatility,
+                "rebalance_frequency": rebalance_freq,
+            }
+
+            # Run optimization
+            opt_result = processor.run_portfolio_optimization(
+                returns_data=returns_df, method=optimization_method, **kwargs
+            )
+
+            # Store results
+            cache_key = f"optimization_{backtest_key}"
+            st.session_state.risk_cache[cache_key] = {
+                "optimization_result": opt_result,
+                "returns_data": returns_df,
+                "calculation_time": datetime.now(),
+                "method": optimization_method,
+                "parameters": kwargs,
+            }
+
+            st.success(f"✅ Portfolio optimized using {optimization_method}!")
+
+    except Exception as e:
+        st.error(f"❌ Error in portfolio optimization: {e}")
+        if st.checkbox("Show optimization error", key="show_opt_error"):
+            st.error(traceback.format_exc())
+
+
+def run_stress_test(
+    backtest_key: str,
+    stress_type: str,
+    scenario_params: dict,
+    num_simulations: int,
+):
+    """Run stress testing scenarios."""
+    try:
+        with st.spinner(f"🔄 Running {num_simulations} stress test simulations..."):
+            # Get backtest data
+            backtest_result = st.session_state.backtest_cache[backtest_key]
+
+            # Extract data
+            processor = st.session_state.risk_processor
+            extracted_data = processor.extract_backtest_data(backtest_result)
+            returns = extracted_data["returns"]
+
+            if returns.empty:
+                st.error("❌ No return data available for stress testing")
+                return
+
+            # Run stress test
+            stress_result = processor.run_stress_test(
+                returns=returns,
+                stress_type=stress_type,
+                scenario_params=scenario_params,
+                num_simulations=num_simulations,
+            )
+
+            # Store results
+            cache_key = f"stress_test_{backtest_key}"
+            st.session_state.risk_cache[cache_key] = {
+                "stress_result": stress_result,
+                "returns": returns,
+                "calculation_time": datetime.now(),
+                "stress_type": stress_type,
+                "parameters": scenario_params,
+                "num_simulations": num_simulations,
+            }
+
+            st.success(f"✅ Stress test completed with {num_simulations} simulations!")
+
+    except Exception as e:
+        st.error(f"❌ Error in stress testing: {e}")
+        if st.checkbox("Show stress test error", key="show_stress_error"):
+            st.error(traceback.format_exc())
+
+
+# ============================================================================
+# RISK ANALYSIS DISPLAY FUNCTIONS
+# ============================================================================
+
+
+def display_risk_metrics():
+    """Display risk metrics analysis results."""
+    risk_metrics_results = [
+        k for k in st.session_state.risk_cache.keys() if k.startswith("risk_metrics_")
+    ]
+
+    if not risk_metrics_results:
+        st.info(
+            "📊 No risk metrics calculated yet. Configure and run analysis from the left panel."
+        )
+        return
+
+    # Select which risk analysis to display
+    if len(risk_metrics_results) > 1:
+        selected_analysis = st.selectbox(
+            "Select Risk Analysis",
+            risk_metrics_results,
+            format_func=lambda x: x.replace("risk_metrics_", "Backtest: "),
+        )
+    else:
+        selected_analysis = risk_metrics_results[0]
+
+    analysis_data = st.session_state.risk_cache[selected_analysis]
+    metrics = analysis_data["metrics"]
+    returns = analysis_data["returns"]
+
+    # Display metrics summary
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Annual Volatility",
+            f"{metrics.get('volatility', 0):.2%}",
+            delta=None,
+            help="Annualized standard deviation of returns",
+        )
+
+    with col2:
+        st.metric(
+            "VaR (95%)",
+            f"{abs(metrics.get('var', 0)):.2%}",
+            delta=None,
+            help="Value at Risk at 95% confidence level",
+        )
+
+    with col3:
+        st.metric(
+            "CVaR (95%)",
+            f"{abs(metrics.get('cvar', 0)):.2%}",
+            delta=None,
+            help="Conditional Value at Risk (Expected Shortfall)",
+        )
+
+    with col4:
+        st.metric(
+            "Max Drawdown",
+            f"{abs(metrics.get('max_drawdown', 0)):.2%}",
+            delta=None,
+            help="Maximum peak-to-trough decline",
+        )
+
+    # Performance ratios
+    st.subheader("📈 Performance Ratios")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        sharpe = metrics.get("sharpe_ratio", 0)
+        st.metric(
+            "Sharpe Ratio",
+            f"{sharpe:.3f}",
+            delta=f"{'Above' if sharpe > 1 else 'Below'} 1.0" if sharpe != 0 else None,
+            help="Risk-adjusted return measure",
+        )
+
+    with col2:
+        sortino = metrics.get("sortino_ratio", 0)
+        st.metric(
+            "Sortino Ratio",
+            f"{sortino:.3f}",
+            delta=None,
+            help="Downside risk-adjusted return measure",
+        )
+
+    with col3:
+        calmar = metrics.get("calmar_ratio", 0)
+        st.metric(
+            "Calmar Ratio",
+            f"{calmar:.3f}",
+            delta=None,
+            help="Return to maximum drawdown ratio",
+        )
+
+    # Risk dashboard chart
+    st.subheader("📊 Risk Dashboard")
+    viz_manager = RiskVisualizationManager()
+
+    risk_dashboard = viz_manager.create_risk_dashboard(metrics)
+    st.plotly_chart(
+        risk_dashboard,
+        use_container_width=True,
+        key=f"risk_dashboard_{selected_analysis}",
+    )
+
+    # Drawdown analysis
+    st.subheader("📉 Drawdown Analysis")
+    drawdown_chart = viz_manager.create_drawdown_chart(returns)
+    st.plotly_chart(
+        drawdown_chart, use_container_width=True, key=f"drawdown_{selected_analysis}"
+    )
+
+
+def display_optimization_results():
+    """Display portfolio optimization results."""
+    opt_results = [
+        k for k in st.session_state.risk_cache.keys() if k.startswith("optimization_")
+    ]
+
+    if not opt_results:
+        st.info(
+            "⚖️ No portfolio optimization performed yet. Configure and run optimization from the left panel."
+        )
+        return
+
+    # Select optimization result to display
+    if len(opt_results) > 1:
+        selected_opt = st.selectbox(
+            "Select Optimization Result",
+            opt_results,
+            format_func=lambda x: x.replace("optimization_", "Optimization: "),
+        )
+    else:
+        selected_opt = opt_results[0]
+
+    opt_data = st.session_state.risk_cache[selected_opt]
+    result = opt_data["optimization_result"]
+    method = opt_data["method"]
+
+    # Display optimization summary
+    st.subheader(f"⚖️ {method} Optimization Results")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Expected Return", f"{result.get('expected_return', 0):.2%}", delta=None
+        )
+
+    with col2:
+        st.metric(
+            "Expected Volatility", f"{result.get('volatility', 0):.2%}", delta=None
+        )
+
+    with col3:
+        expected_return = result.get("expected_return", 0)
+        volatility = result.get("volatility", 0)
+        sharpe = expected_return / volatility if volatility > 0 else 0
+        st.metric("Sharpe Ratio", f"{sharpe:.3f}", delta=None)
+
+    # Optimization details
+    if result.get("weights"):
+        st.subheader("📊 Optimal Weights")
+        weights_df = pd.DataFrame(
+            {
+                "Asset": [f"Asset_{i+1}" for i in range(len(result["weights"]))],
+                "Weight": result["weights"],
+                "Weight_%": [w * 100 for w in result["weights"]],
+            }
+        )
+        st.dataframe(weights_df, use_container_width=True)
+
+    # Additional optimization info
+    with st.expander("🔍 Optimization Details"):
+        st.json(
+            {
+                "Method": method,
+                "Calculation Time": str(opt_data["calculation_time"]),
+                "Parameters": opt_data["parameters"],
+                "Status": result.get("status", "Completed"),
+            }
+        )
+
+
+def display_position_sizing_results():
+    """Display position sizing analysis results."""
+    sizing_results = [
+        k
+        for k in st.session_state.risk_cache.keys()
+        if k.startswith("position_sizing_")
+    ]
+
+    if not sizing_results:
+        st.info(
+            "🎯 No position sizing analysis performed yet. Configure and calculate from the left panel."
+        )
+        return
+
+    # Select sizing result to display
+    if len(sizing_results) > 1:
+        selected_sizing = st.selectbox(
+            "Select Position Sizing Result",
+            sizing_results,
+            format_func=lambda x: x.replace("position_sizing_", "Position Sizing: "),
+        )
+    else:
+        selected_sizing = sizing_results[0]
+
+    sizing_data = st.session_state.risk_cache[selected_sizing]
+    result = sizing_data["sizing_result"]
+    method = sizing_data["method"]
+
+    # Display position sizing results
+    st.subheader(f"🎯 {method} Position Sizing")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        position_size = result.get("position_size", 0)
+        st.metric(
+            "Recommended Position Size",
+            f"{position_size:.2%}",
+            delta=None,
+            help=f"Optimal position size using {method}",
+        )
+
+    with col2:
+        # Risk assessment
+        if position_size > 0.5:
+            risk_level = "🔴 High Risk"
+        elif position_size > 0.25:
+            risk_level = "🟡 Medium Risk"
+        else:
+            risk_level = "🟢 Low Risk"
+
+        st.metric("Risk Assessment", risk_level, delta=None)
+
+    # Position sizing comparison chart
+    st.subheader("📊 Position Sizing Analysis")
+    viz_manager = RiskVisualizationManager()
+
+    sizing_chart = viz_manager.create_position_sizing_analysis(result)
+    st.plotly_chart(
+        sizing_chart, use_container_width=True, key=f"pos_sizing_{selected_sizing}"
+    )
+
+    # Position sizing details
+    with st.expander("🔍 Position Sizing Details"):
+        st.json(
+            {
+                "Method": method,
+                "Position Size": f"{position_size:.4f}",
+                "Calculation Time": str(sizing_data["calculation_time"]),
+                "Parameters": sizing_data["parameters"],
+            }
+        )
+
+    # Risk warnings
+    if position_size > 0.3:
+        st.warning(
+            """
+        ⚠️ **High Position Size Warning**
+        
+        The calculated position size is quite large (>30%). Consider:
+        - Reducing position size for risk management
+        - Diversifying across multiple assets
+        - Implementing stop-loss mechanisms
+        """
+        )
+
+
+def display_stress_test_results():
+    """Display stress testing results."""
+    stress_results = [
+        k for k in st.session_state.risk_cache.keys() if k.startswith("stress_test_")
+    ]
+
+    if not stress_results:
+        st.info(
+            "🔥 No stress tests performed yet. Configure and run stress testing from the left panel."
+        )
+        return
+
+    # Select stress test result to display
+    if len(stress_results) > 1:
+        selected_stress = st.selectbox(
+            "Select Stress Test Result",
+            stress_results,
+            format_func=lambda x: x.replace("stress_test_", "Stress Test: "),
+        )
+    else:
+        selected_stress = stress_results[0]
+
+    stress_data = st.session_state.risk_cache[selected_stress]
+    result = stress_data["stress_result"]
+    stress_type = stress_data["stress_type"]
+
+    # Display stress test summary
+    st.subheader(f"🔥 {stress_type} Stress Test Results")
+
+    stressed_returns = result.get("stressed_returns", [])
+
+    if stressed_returns:
+        stressed_array = np.array(stressed_returns)
+
+        # Summary statistics
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Mean Stressed Return", f"{np.mean(stressed_array):.2%}", delta=None
+            )
+
+        with col2:
+            st.metric(
+                "Worst Case (5th percentile)",
+                f"{np.percentile(stressed_array, 5):.2%}",
+                delta=None,
+            )
+
+        with col3:
+            st.metric(
+                "Best Case (95th percentile)",
+                f"{np.percentile(stressed_array, 95):.2%}",
+                delta=None,
+            )
+
+        with col4:
+            st.metric("Stress Volatility", f"{np.std(stressed_array):.2%}", delta=None)
+
+        # Stress test visualization
+        st.subheader("📊 Stress Test Distribution")
+        viz_manager = RiskVisualizationManager()
+
+        stress_chart = viz_manager.create_stress_test_results(result)
+        st.plotly_chart(
+            stress_chart, use_container_width=True, key=f"stress_{selected_stress}"
+        )
+
+        # Risk assessment
+        worst_case = np.percentile(stressed_array, 5)
+        if worst_case < -0.2:
+            risk_assessment = "🔴 High Risk - Severe losses possible"
+        elif worst_case < -0.1:
+            risk_assessment = "🟡 Medium Risk - Moderate losses possible"
+        else:
+            risk_assessment = "🟢 Low Risk - Limited downside exposure"
+
+        st.info(f"**Risk Assessment:** {risk_assessment}")
+
+    # Stress test details
+    with st.expander("🔍 Stress Test Details"):
+        st.json(
+            {
+                "Stress Type": stress_type,
+                "Number of Simulations": stress_data["num_simulations"],
+                "Calculation Time": str(stress_data["calculation_time"]),
+                "Parameters": stress_data["parameters"],
+            }
+        )
 
 
 if __name__ == "__main__":
