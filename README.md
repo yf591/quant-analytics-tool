@@ -9,9 +9,14 @@
 
 This tool implements methodologies from "Advances in Financial Machine Learning" to provide integrated financial data analysis, strategy development, and backtesting capabilities using machine learning.
 
+![toppage](_images/qat_toppage.jpeg)
+
 ## 🎯 Key Features
 
 ### 📊 Data Acquisition & Analysis
+
+![Data Acquisition](_images/qat_data_acquisition.jpeg)
+
 - **Multi-Source Data Integration**: Yahoo Finance, Alpha Vantage, Polygon APIs
 - **Real-time Data Processing**: Live market data with <15 minute latency
 - **Historical Data Management**: Comprehensive historical data storage and retrieval
@@ -19,7 +24,9 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
 - **Multi-Asset Support**: Stocks, ETFs, FX, Cryptocurrencies, Options
 
 ### 🧠 Advanced Machine Learning
+![model_traning_hub](_images/qat_model_traning_hub.jpeg)
 - **MLOps Pipeline**: Complete end-to-end ML pipeline with automated training, versioning, deployment (✅ Implemented)
+  ![MLOps Pipeline](_images/qat_training_pipeline.jpeg)
   - Automated model training pipeline with AFML-compliant time-series cross-validation
   - Model registry with SQLite backend and staging→production workflow
   - Real-time prediction engine with TTL caching and ensemble predictions
@@ -27,20 +34,26 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
   - Continuous model monitoring with data drift detection and real-time alerting
 - **Advanced Models**: Transformer architecture, Multi-head Attention, Meta-labeling (✅ Implemented)
 - **Deep Learning Models**: LSTM, Bidirectional LSTM, GRU architectures (✅ Implemented)
+    ![Deep Learning Models](_images/qat_training2.jpeg)
 - **Ensemble Methods**: Random Forest, Bagging, Stacking, Voting Classifiers (✅ Implemented)
 - **Traditional ML**: Random Forest, XGBoost, Support Vector Machines (✅ Implemented)
+  ![Traditional ML](_images/qat_training1.jpeg)
 - **Model Interpretation**: SHAP analysis, Feature importance, Partial dependence (✅ Implemented)
 - **Model Framework**: Base classes, evaluation, cross-validation (✅ Implemented)
 - **Production Deployment**: Enterprise-grade MLOps platform with 108 comprehensive tests (✅ Implemented)
 
 ### 📈 Sophisticated Feature Engineering
 - **Technical Indicators**: Complete TA-Lib integration with custom indicators (✅ Implemented)
+  ![Feature Engineering1](_images/qat_features1.jpeg)
+  ![Feature Engineering3](_images/qat_features3.jpeg)
 - **Advanced Features**: Fractal dimension, Hurst exponent, information-driven bars (✅ Implemented)
+  ![Feature Engineering2](_images/qat_features2.jpeg)
 - **Meta-Labeling**: Triple barrier method from "Advances in Financial ML" (✅ Implemented)
 - **Feature Selection**: Automated feature importance and selection algorithms (✅ Implemented)
 - **Feature Pipeline**: Automated feature generation and quality validation (✅ Implemented)
 
 ### 🔙 Comprehensive Backtesting
+![Backtesting](_images/qat_backtesting.jpeg)
 - **Strategy Framework**: Extensible strategy development framework (✅ Implemented)
 - **Performance Analytics**: 20+ performance and risk metrics (✅ Implemented)
 - **Event-driven Engine**: AFML-compliant backtesting with time-series integrity (✅ Implemented)
@@ -48,6 +61,7 @@ This tool implements methodologies from "Advances in Financial Machine Learning"
 - **Trade Execution**: Realistic slippage, commission modeling, market impact (✅ Implemented)
 
 ### ⚖️ Advanced Risk Management (✅ Week 12 Completed)
+![Risk Management](_images/qat_risk_management.jpeg)
 - **Position Sizing**: Kelly criterion, risk parity, AFML bet sizing, volatility targeting (✅ Implemented)
 - **Risk Metrics**: VaR/CVaR (parametric, historical, Monte Carlo), maximum drawdown, portfolio risk analysis (✅ Implemented)
 - **Portfolio Optimization**: Modern Portfolio Theory, Black-Litterman, Hierarchical Risk Parity (HRP) (✅ Implemented)
